@@ -1,12 +1,6 @@
-{ VerySimpleXML v1.4 - a lightweight, one-unit XML reader/writer
+{ VerySimpleXML v1.0 - a lightweight, one-unit XML reader/writer
   by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
-
-  1.3 - LoadFromFile/Stream now checks if header is UTF8
-      - Removed "extended" quotation marks support
-
-  1.4 Remove ' from node attributes
-      Renamed to XmlVerySimple
 
   (c) Copyrights 2011 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
@@ -56,8 +50,8 @@ type
   public
     Parent: TXmlNode; // NIL only for Root-Node
     NodeName: String; // Node name
+    Text: String; // Node text
     ChildNodes: TXmlNodeList; // Child nodes, never NIL
-    Text: String;
     constructor Create; virtual;
     destructor Destroy; override;
     // Find a childnode by its name
@@ -70,11 +64,8 @@ type
     function FindNodes(Name: String): TXmlNodeList; virtual;
     // Returns True if the Attribute exits
     function HasAttribute(const Name: String): Boolean; virtual;
-    // Returns True if this child nodes exists
-    function HasChild(const Name: String): Boolean; virtual;
     // Add a child node and return it
     function AddChild(const Name: String): TXmlNode; virtual;
-    function InsertChild(const Name: String; Pos: Integer): TXmlNode; virtual;
     function SetText(Value: String): TXmlNode; virtual;
     function SetAttribute(const AttrName: String;
       const Value: String): TXmlNode; virtual;
@@ -84,15 +75,11 @@ type
 
   TXmlNodeList = class(TObjectList<TXmlNode>);
 
-  TXmlVerySimple = class(TObject)
+  TVerySimpleXml = class(TObject)
   private
     Lines: TStringList;
     procedure Parse;
     procedure Walk(Lines: TStringList; Prefix: String; Node: TXmlNode);
-    procedure SetText(Value: String);
-    function GetText: String;
-    function Escape(Value: String): String;
-    function UnEscape(Value: String): String;
   public
     Root: TXmlNode; // There is only one Root Node
     Header: TXmlNode; // XML declarations are stored in here as Attributes
@@ -107,17 +94,16 @@ type
     // Encoding is specified in Header-Node
     procedure SaveToStream(const Stream: TStream); virtual;
     procedure SaveToFile(const FileName: String); virtual;
-    property Text: String read GetText write SetText;
   end;
 
 implementation
 
 uses
-  SysUtils, StrUtils;
+  SysUtils;
 
 { TVerySimpleXml }
 
-procedure TXmlVerySimple.Clear;
+procedure TVerySimpleXml.Clear;
 begin
   Root.Free;
   Header.Free;
@@ -129,14 +115,14 @@ begin
   Lines.Clear;
 end;
 
-constructor TXmlVerySimple.Create;
+constructor TVerySimpleXml.Create;
 begin
   inherited;
   Lines := TStringList.Create;
   Clear;
 end;
 
-destructor TXmlVerySimple.Destroy;
+destructor TVerySimpleXml.Destroy;
 begin
   Root.Free;
   Header.Free;
@@ -144,58 +130,23 @@ begin
   inherited;
 end;
 
-function TXmlVerySimple.Escape(Value: String): String;
+procedure TVerySimpleXml.LoadFromFile(const FileName: String);
 begin
-  Result := ReplaceStr(Value, '&', '&amp;');
-  Result := ReplaceStr(Result, '<', '&lt;');
-  Result := ReplaceStr(Result, '>', '&gt;');
-  Result := ReplaceStr(Result, chr(39), '&apos;');
-  Result := ReplaceStr(Result, '"', '&quot;');
-end;
-
-function TXmlVerySimple.GetText: String;
-begin
-  Lines.Clear;
-  if Ident = '' then
-    Lines.LineBreak := '';
-
-  // Create XML introduction
-  Walk(Lines, '', Header);
-
-  // Create nodes representation
-  Walk(Lines, '', Root);
-  Result := Lines.Text;
-end;
-
-procedure TXmlVerySimple.LoadFromFile(const FileName: String);
-var
-  Utf8: Boolean;
-begin
-  Utf8 := (lowercase(Header.Attribute['encoding']) = 'utf-8');
   Clear;
-  if Utf8 then
-    Lines.LoadFromFile(FileName, TEncoding.UTF8)
-  else
-    Lines.LoadFromFile(FileName);
+  Lines.LoadFromFile(FileName);
   Parse;
   Lines.Clear;
 end;
 
-procedure TXmlVerySimple.LoadFromStream(const Stream: TStream);
-var
-  Utf8: Boolean;
+procedure TVerySimpleXml.LoadFromStream(const Stream: TStream);
 begin
-  Utf8 := (lowercase(Header.Attribute['encoding']) = 'utf-8');
   Clear;
-  if Utf8 then
-    Lines.LoadFromStream(Stream, TEncoding.UTF8)
-  else
-    Lines.LoadFromStream(Stream);
+  Lines.LoadFromStream(Stream);
   Parse;
   Lines.Clear;
 end;
 
-procedure TXmlVerySimple.Parse;
+procedure TVerySimpleXml.Parse;
 var
   Line: String;
   IsTag, IsText: Boolean;
@@ -206,13 +157,19 @@ var
   ALine, Attr, AttrText: String;
   P: Integer;
   IsSelfClosing: Boolean;
+  IsQuote: Boolean;
 
   // Return a text ended by StopChar, respect quotation marks
   function GetText(var Line: String; StartStr: String; StopChar: Char): String;
+  var
+    Chr: Char;
   begin
-    while (Length(Line) > 0) and ((Line[1] <> StopChar)) do
+    while (Length(Line) > 0) and ((Line[1] <> StopChar) or (IsQuote)) do
     begin
-      StartStr := StartStr + Line[1];
+      Chr := Line[1];
+      if Chr = '"' then
+        IsQuote := Not IsQuote;
+      StartStr := StartStr + Chr;
       delete(Line, 1, 1);
     end;
     Result := StartStr;
@@ -224,6 +181,7 @@ begin
 
   IsTag := False;
   IsText := False;
+  IsQuote := False;
   Node := NIL;
 
   for I := 0 to Lines.Count - 1 do
@@ -260,6 +218,7 @@ begin
           begin
             Parent := Node;
             IsText := True;
+            IsQuote := False;
 
             Node := TXmlNode.Create;
             if lowercase(copy(Tag, 1, 4)) = '?xml' then // check for xml header
@@ -293,10 +252,10 @@ begin
                 begin
                   delete(AttrText, 1, 1); // Remove blank
 
-                  if (AttrText[1] = '"') or (AttrText[1] = '''') then // Remove start/end quotation marks
+                  if AttrText[1] = '"' then // Remove start/end quotation marks
                   begin
                     delete(AttrText, 1, 1);
-                    if (AttrText[Length(AttrText)] = '"') or ((AttrText[Length(AttrText)] = '''')) then
+                    if AttrText[Length(AttrText)] = '"' then
                       delete(AttrText, Length(AttrText), 1);
                   end;
                 end;
@@ -312,6 +271,7 @@ begin
                   Attribute.Value := AttrText;
                   Node.FAttributes.Add(Attribute);
                 end;
+                IsQuote := False;
               end;
             end;
 
@@ -342,7 +302,7 @@ begin
           IsText := False;
           while (Length(Text) > 0) and (Text[1] = ' ') do
             delete(Text, 1, 1);
-          Node.Text := UnEscape(Text);
+          Node.Text := Text;
         end;
       end;
 
@@ -350,7 +310,7 @@ begin
   end;
 end;
 
-procedure TXmlVerySimple.SaveToFile(const FileName: String);
+procedure TVerySimpleXml.SaveToFile(const FileName: String);
 var
   Stream: TFileStream;
 begin
@@ -359,36 +319,30 @@ begin
   Stream.Free;
 end;
 
-procedure TXmlVerySimple.SaveToStream(const Stream: TStream);
+procedure TVerySimpleXml.SaveToStream(const Stream: TStream);
 var
+  Lines: TStringList;
   Encoding: TEncoding;
 begin
-  GetText;
+  Lines := TStringList.Create;
+  if Ident = '' then
+    Lines.LineBreak := '';
+
   Encoding := TEncoding.Default;
+
+  // Create XML introduction
+  Walk(Lines, '', Header);
   if lowercase(Header.Attribute['encoding']) = 'utf-8' then
     Encoding := TEncoding.UTF8;
+
+  // Create nodes representation
+  Walk(Lines, '', Root);
+
   Lines.SaveToStream(Stream, Encoding);
-  Lines.Clear;
+  Lines.Free;
 end;
 
-procedure TXmlVerySimple.SetText(Value: String);
-begin
-  Clear;
-  Lines.Text := Value;
-  Parse;
-  Lines.Clear;
-end;
-
-function TXmlVerySimple.UnEscape(Value: String): String;
-begin
-  Result := ReplaceStr(Value, '&lt;', '<' );
-  Result := ReplaceStr(Result, '&gt;', '>');
-  Result := ReplaceStr(Result, '&apos;', chr(39));
-  Result := ReplaceStr(Result, '&quot;', '"');
-  Result := ReplaceStr(Result, '&amp;', '&');
-end;
-
-procedure TXmlVerySimple.Walk(Lines: TStringList; Prefix: String;
+procedure TVerySimpleXml.Walk(Lines: TStringList; Prefix: String;
   Node: TXmlNode);
 var
   Child: TXmlNode;
@@ -411,7 +365,7 @@ begin
 
   S := S + '>';
   if Length(Node.Text) > 0 then
-    S := S + Escape(Node.Text);
+    S := S + Node.Text;
 
   if (Node.ChildNodes.Count = 0) and (Length(Node.Text) > 0) then
   begin
@@ -522,19 +476,6 @@ end;
 function TXmlNode.HasAttribute(const Name: String): Boolean;
 begin
   Result := assigned(FAttributes.Find(Name));
-end;
-
-function TXmlNode.HasChild(const Name: String): Boolean;
-begin
-  Result := assigned(Find(Name));
-end;
-
-function TXmlNode.InsertChild(const Name: String; Pos: Integer): TXmlNode;
-begin
-  Result := TXmlNode.Create;
-  Result.NodeName := Name;
-  Result.Parent := Self;
-  ChildNodes.Insert(Pos, Result);
 end;
 
 procedure TXmlNode.SetAttr(const AttrName, Value: String);

@@ -83,14 +83,4 @@ object FrmMain: TFrmMain
     TabOrder = 5
     OnClick = BtnLoadClick
   end
-  object BtnGet: TButton
-    Left = 8
-    Top = 163
-    Width = 81
-    Height = 25
-    Caption = 'Get Desc'
-    Enabled = False
-    TabOrder = 6
-    OnClick = BtnGetClick
-  end
 end

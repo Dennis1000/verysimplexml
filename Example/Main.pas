@@ -14,19 +14,17 @@ type
     BtnCompact: TButton;
     BtnSave: TButton;
     BtnLoad: TButton;
-    BtnGet: TButton;
     procedure BtnGenerateClick(Sender: TObject);
     procedure BtnModifyClick(Sender: TObject);
     procedure BtnCompactClick(Sender: TObject);
     procedure BtnSaveClick(Sender: TObject);
     procedure BtnLoadClick(Sender: TObject);
-    procedure BtnGetClick(Sender: TObject);
   private
     { Private declarations }
   public
     { Public declarations }
-    procedure ShowXml(Xml: TXmlVerySimple);
-    procedure MemoToXml(Xml: TXmlVerySimple);
+    procedure ShowXml(Xml: TVerySimpleXml);
+    procedure MemoToXml(Xml: TVerySimpleXml);
   end;
 
 var
@@ -38,10 +36,10 @@ implementation
 
 procedure TFrmMain.BtnCompactClick(Sender: TObject);
 var
-  Xml: TXmlVerySimple;
+  Xml: TVerySimpleXml;
 begin
   // Load XML from Memo1
-  Xml := TXmlVerySimple.Create;
+  Xml := TVerySimpleXml.Create;
   MemoToXml(Xml);
   Xml.Ident := '';
   ShowXml(Xml);
@@ -53,10 +51,10 @@ end;
 
 procedure TFrmMain.BtnGenerateClick(Sender: TObject);
 var
-  Xml: TXmlVerySimple;
+  Xml: TVerySimpleXml;
   Node, Child, SubChild: TXmlNode;
 begin
-  Xml := TXmlVerySimple.Create;
+  Xml := TVerySimpleXml.Create;
   Xml.Header.Attribute['encoding'] := 'utf-8';
 
   Xml.Root.NodeName := 'catalog';
@@ -81,8 +79,8 @@ begin
   Child.Text := 'Maeve Ascendant';
 
   Child := Node.AddChild('description');
-  Child.Text := 'After the "collapse" of a <nanotechnology> society in England, ' +
-  'the young survivors lay the foundation for a new society.';
+  Child.Text := '"After the collapse of a <nanotechnology> society in England, ' +
+  'the young survivors lay the foundation for a new society."';
 
   Child := Node.AddChild('keywords');
   SubChild := Child.AddChild('keyword');
@@ -100,29 +98,16 @@ begin
 end;
 
 
-procedure TFrmMain.BtnGetClick(Sender: TObject);
-var
-  Xml: TXmlVerySimple;
-begin
-  // Load XML from Memo1
-  Xml := TXmlVerySimple.Create;
-  MemoToXml(Xml);
-
-  ShowMessage(Xml.Root.Find('book', 'id', 'bk103').Find('description').Text);
-
-  Xml.Free;
-  BtnGet.Enabled := False;
-end;
-
 procedure TFrmMain.BtnModifyClick(Sender: TObject);
 var
-  Xml: TXmlVerySimple;
+  Xml: TVerySimpleXml;
   Node, BookNode: TXmlNode;
   Nodes, AllNodes: TXmlNodeList;
   Index: Integer;
 begin
   // Load XML from Memo1
-  Xml := TXmlVerySimple.Create;
+  Xml := TVerySimpleXml.Create;
+
 
   Index := Memo1.Lines.Count - 1;
 
@@ -142,8 +127,7 @@ begin
   // Add a new keyword to a certain book (id=bk102)
   Xml.Root.Find('book', 'id', 'bk102').Find('keywords').
     AddChild('keyword').SetText('no-muerto').SetAttribute('lang', 'es').Parent.
-    AddChild('keyword').SetText('zombies').Parent.AddChild('keywrd').SetText('flombies');
-
+    AddChild('keyword').SetText('zombies');
 
   // Add new keyword attribute (lang=en) to every book
   AllNodes := Xml.Root.FindNodes('book');
@@ -157,13 +141,6 @@ begin
   end;
   AllNodes.Free;
 
-  // Delete a node
-  Node := Xml.Root.Find('book', 'id', 'bk102').Find('author');
-
-  // remove node from parent childnodes, the node itself will be freed then
-  if assigned(Node) then
-      Node.Parent.ChildNodes.Remove(Node);
-
   ShowXml(Xml);
 
   Xml.Free;
@@ -174,10 +151,10 @@ end;
 
 procedure TFrmMain.BtnSaveClick(Sender: TObject);
 var
-  Xml: TXmlVerySimple;
+  Xml: TVerySimpleXml;
 begin
   // Load XML from Memo1
-  Xml := TXmlVerySimple.Create;
+  Xml := TVerySimpleXml.Create;
   MemoToXml(Xml);
   Xml.SaveToFile('example.xml');
   Xml.Free;
@@ -187,12 +164,18 @@ begin
   memo1.Text := 'example.xml saved.';
 end;
 
-procedure TFrmMain.MemoToXml(Xml: TXmlVerySimple);
+procedure TFrmMain.MemoToXml(Xml: TVerySimpleXml);
+var
+  Stream: TMemoryStream;
 begin
-  Xml.Text := Memo1.Text;
+  Stream := TMemoryStream.Create;
+  Memo1.Lines.SaveToStream(Stream);
+  Stream.Position := 0;
+  Xml.LoadFromStream(Stream);
+  Stream.Free;
 end;
 
-procedure TFrmMain.ShowXml(Xml: TXmlVerySimple);
+procedure TFrmMain.ShowXml(Xml: TVerySimpleXml);
 var
   Stream: TMemoryStream;
 begin
@@ -206,17 +189,16 @@ end;
 
 procedure TFrmMain.BtnLoadClick(Sender: TObject);
 var
-  Xml: TXmlVerySimple;
+  Xml: TVerySimpleXml;
 begin
   // Load XML from Memo1
-  Xml := TXmlVerySimple.Create;
+  Xml := TVerySimpleXml.Create;
   Xml.LoadFromFile('example.xml');
 
   ShowXml(Xml);
 
   Xml.Free;
   BtnLoad.Enabled := False;
-  BtnGet.Enabled := True;
 end;
 
 end.
