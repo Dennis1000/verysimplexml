@@ -1,14 +1,8 @@
-{ VerySimpleXML v1.4 - a lightweight, one-unit XML reader/writer
+{ VerySimpleXML v1.1 - a lightweight, one-unit XML reader/writer
   by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
-  1.3 - LoadFromFile/Stream now checks if header is UTF8
-      - Removed "extended" quotation marks support
-
-  1.4 Remove ' from node attributes
-      Renamed to XmlVerySimple
-
-  (c) Copyrights 2011 Dennis D. Spreen <dennis@spreendigital.de>
+  (c) Copyrights 2012 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
   any changes and the use of those changed library is permitted without
   limitations. Only requirement:
@@ -57,7 +51,8 @@ type
     Parent: TXmlNode; // NIL only for Root-Node
     NodeName: String; // Node name
     ChildNodes: TXmlNodeList; // Child nodes, never NIL
-    Text: String;
+    Text: String; // Node text content
+    Obj: TObject; // attached object
     constructor Create; virtual;
     destructor Destroy; override;
     // Find a childnode by its name
@@ -84,10 +79,15 @@ type
 
   TXmlNodeList = class(TObjectList<TXmlNode>);
 
+  TXmlOnNodeSetText = procedure (Sender: TObject; Node: TXmlNode; Text: String) of
+    object;
+
   TXmlVerySimple = class(TObject)
   private
     Lines: TStringList;
-    procedure Parse;
+    FOnNodeSetText: TXmlOnNodeSetText;
+    FOnNodeSetName: TXmlOnNodeSetText;
+    procedure Parse(Reader: TStreamReader);
     procedure Walk(Lines: TStringList; Prefix: String; Node: TXmlNode);
     procedure SetText(Value: String);
     function GetText: String;
@@ -107,7 +107,11 @@ type
     // Encoding is specified in Header-Node
     procedure SaveToStream(const Stream: TStream); virtual;
     procedure SaveToFile(const FileName: String); virtual;
+    procedure DefaultOnNodeSetText(Sender: TObject; Node: TXmlNode; Text: String); inline;
+    procedure DefaultOnNodeSetName(Sender: TObject; Node: TXmlNode; Name: String); inline;
     property Text: String read GetText write SetText;
+    property OnNodeSetText: TXmlOnNodeSetText read FOnNodeSetText write FOnNodeSetText;
+    property OnNodeSetName: TXmlOnNodeSetText read FOnNodeSetName write FOnNodeSetName;
   end;
 
 implementation
@@ -115,7 +119,7 @@ implementation
 uses
   SysUtils, StrUtils;
 
-{ TVerySimpleXml }
+{ TXmlVerySimple }
 
 procedure TXmlVerySimple.Clear;
 begin
@@ -133,7 +137,21 @@ constructor TXmlVerySimple.Create;
 begin
   inherited;
   Lines := TStringList.Create;
+  FOnNodeSetText := DefaultOnNodeSetText;
+  FOnNodeSetName := DefaultOnNodeSetName;
   Clear;
+end;
+
+procedure TXmlVerySimple.DefaultOnNodeSetName(Sender: TObject; Node: TXmlNode;
+  Name: String);
+begin
+  Node.NodeName := Name;
+end;
+
+procedure TXmlVerySimple.DefaultOnNodeSetText(Sender: TObject; Node: TXmlNode;
+  Text: String);
+begin
+  Node.Text := Text;
 end;
 
 destructor TXmlVerySimple.Destroy;
@@ -169,50 +187,46 @@ end;
 
 procedure TXmlVerySimple.LoadFromFile(const FileName: String);
 var
-  Utf8: Boolean;
+  FileStream: TFileStream;
 begin
-  Utf8 := (lowercase(Header.Attribute['encoding']) = 'utf-8');
-  Clear;
-  if Utf8 then
-    Lines.LoadFromFile(FileName, TEncoding.UTF8)
-  else
-    Lines.LoadFromFile(FileName);
-  Parse;
-  Lines.Clear;
+  FileStream :=  TFileStream.Create(FileName, fmOpenRead);
+  LoadFromStream(FileStream);
+  FileStream.Free;
 end;
 
 procedure TXmlVerySimple.LoadFromStream(const Stream: TStream);
 var
-  Utf8: Boolean;
+  Reader: TStreamReader;
 begin
-  Utf8 := (lowercase(Header.Attribute['encoding']) = 'utf-8');
   Clear;
-  if Utf8 then
-    Lines.LoadFromStream(Stream, TEncoding.UTF8)
-  else
-    Lines.LoadFromStream(Stream);
-  Parse;
-  Lines.Clear;
+  Reader := TStreamReader.Create(Stream);
+  Parse(Reader);
+  Reader.Free;
 end;
 
-procedure TXmlVerySimple.Parse;
+procedure TXmlVerySimple.Parse(Reader: TStreamReader);
 var
   Line: String;
   IsTag, IsText: Boolean;
   Tag, Text: String;
   Parent, Node: TXmlNode;
-  I: Integer;
   Attribute: TXmlAttribute;
   ALine, Attr, AttrText: String;
   P: Integer;
   IsSelfClosing: Boolean;
+  IsQuote: Boolean;
 
   // Return a text ended by StopChar, respect quotation marks
   function GetText(var Line: String; StartStr: String; StopChar: Char): String;
+  var
+    Chr: Char;
   begin
-    while (Length(Line) > 0) and ((Line[1] <> StopChar)) do
+    while (Length(Line) > 0) and ((Line[1] <> StopChar) or (IsQuote)) do
     begin
-      StartStr := StartStr + Line[1];
+      Chr := Line[1];
+      if Chr = '"' then
+        IsQuote := Not IsQuote;
+      StartStr := StartStr + Chr;
       delete(Line, 1, 1);
     end;
     Result := StartStr;
@@ -224,11 +238,12 @@ begin
 
   IsTag := False;
   IsText := False;
+  IsQuote := False;
   Node := NIL;
 
-  for I := 0 to Lines.Count - 1 do
+  while not Reader.EndOfStream do
   begin
-    Line := Lines[I];
+    Line := Reader.ReadLine;
 
     while (Length(Line) > 0) do
     begin
@@ -260,10 +275,14 @@ begin
           begin
             Parent := Node;
             IsText := True;
+            IsQuote := False;
 
             Node := TXmlNode.Create;
             if lowercase(copy(Tag, 1, 4)) = '?xml' then // check for xml header
             begin
+              Tag := TrimRight(Tag);
+              if Tag[Length(Tag)]='?' then
+                delete(Tag, Length(Tag), 1);
               Header.Free;
               Header := Node;
             end;
@@ -293,10 +312,10 @@ begin
                 begin
                   delete(AttrText, 1, 1); // Remove blank
 
-                  if (AttrText[1] = '"') or (AttrText[1] = '''') then // Remove start/end quotation marks
+                  if AttrText[1] = '"' then // Remove start/end quotation marks
                   begin
                     delete(AttrText, 1, 1);
-                    if (AttrText[Length(AttrText)] = '"') or ((AttrText[Length(AttrText)] = '''')) then
+                    if AttrText[Length(AttrText)] = '"' then
                       delete(AttrText, Length(AttrText), 1);
                   end;
                 end;
@@ -312,10 +331,11 @@ begin
                   Attribute.Value := AttrText;
                   Node.FAttributes.Add(Attribute);
                 end;
+                IsQuote := False;
               end;
             end;
 
-            Node.NodeName := Tag;
+            FOnNodeSetName(Self, Node, Tag);
             Node.Parent := Parent;
             if assigned(Parent) then
               Parent.ChildNodes.Add(Node)
@@ -342,12 +362,13 @@ begin
           IsText := False;
           while (Length(Text) > 0) and (Text[1] = ' ') do
             delete(Text, 1, 1);
-          Node.Text := UnEscape(Text);
+          FOnNodeSetText(Self, Node, UnEscape(Text));
         end;
       end;
 
     end;
   end;
+  Reader.Close;
 end;
 
 procedure TXmlVerySimple.SaveToFile(const FileName: String);
@@ -372,11 +393,16 @@ begin
 end;
 
 procedure TXmlVerySimple.SetText(Value: String);
+var
+  Stream: TMemoryStream;
 begin
-  Clear;
+  Stream := TMemoryStream.Create;
   Lines.Text := Value;
-  Parse;
+  Lines.SaveToStream(Stream);
   Lines.Clear;
+  Stream.Position := 0;
+  LoadFromStream(Stream);
+  Stream.Free;
 end;
 
 function TXmlVerySimple.UnEscape(Value: String): String;
