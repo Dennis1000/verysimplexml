@@ -197,7 +197,6 @@ begin
   Header.Name := '?xml'; // Default XML Header
   Version := '1.0'; // Default XML Version
   Options := [doNodeAutoIndent];
-  Clear;
 end;
 
 destructor TXmlVerySimple.Destroy;
@@ -266,7 +265,7 @@ var
 begin
   Lines := TStringList.Create;
   try
-    if MatchText(Self.Encoding, ['utf-8', '']) then
+    if AnsiSameText(Self.Encoding, 'utf-8') then
       Encoding := TEncoding.UTF8
     else
       Encoding := TEncoding.Default;
@@ -378,8 +377,11 @@ begin
               while Length(ALine) > 0 do
               begin
                 Attr := GetText(ALine, '', '=', True); // Get Attribute Name
-                AttrText := GetText(ALine, '', ' ', True);
-                // Get Attribute Value
+                AttrText := GetText(ALine, '', ' ', True); // Get Attribute Value
+
+                // remove closing instruction marker "?"
+                if (Node = Header) and (ALine = '') and (AttrText <> '') and (AttrText[High(AttrText)]='?') then
+                  Delete(AttrText, High(AttrText), 1);
 
                 if Length(AttrText) > 0 then
                 begin
@@ -455,7 +457,7 @@ begin
   Lines := TStringList.Create;
   try
     Lines.Text := GetText;
-    if MatchText(Self.Encoding, ['utf-8']) then
+    if AnsiSameText(Self.Encoding, 'utf-8') then
       Encoding := TEncoding.UTF8
     else
       Encoding := TEncoding.Default;
@@ -510,7 +512,7 @@ begin
 
   if Node = Header then
   begin
-    Lines.Add(S + ' ?>');
+    Lines.Add(S + '?>');
     Exit;
   end;
 
