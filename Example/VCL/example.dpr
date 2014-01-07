@@ -3,7 +3,7 @@ program example;
 uses
   Vcl.Forms,
   Main in 'Main.pas' {FrmMain},
-  Xml.VerySimple in '..\Source\Xml.VerySimple.pas';
+  Xml.VerySimple in '..\..\Source\Xml.VerySimple.pas';
 
 {$R *.res}
 

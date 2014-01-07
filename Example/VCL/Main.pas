@@ -127,7 +127,7 @@ begin
   Index := Memo1.Lines.Count - 1;
 
   // Add a new book
-  Memo1.Lines.Insert(Index, '<book id=bk104><author rate=">5">Corets, Eva</author><description/>' +
+  Memo1.Lines.Insert(Index, '<book id=bk104><author rate="&gt;5">Corets, Eva</author><description/>' +
    '<keywords /></book>');
 
   MemoToXml(Xml);
