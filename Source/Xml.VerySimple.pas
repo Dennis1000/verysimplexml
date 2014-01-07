@@ -1,16 +1,28 @@
-﻿{ VerySimpleXML v1.4 - a lightweight, one-unit XML reader/writer
-  by Dennis Spreen
+﻿{ VerySimpleXML v1.5 - a lightweight, one-unit, cross-platform XML reader/writer
+  for Delphi 2009-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
-  1.3 - LoadFromFile/Stream now checks if header is UTF8
-  - Removed "extended" quotation marks support
+  1.0 Initial release
+  1.1 Removed "extended" quotation marks support, Renamed to XmlVerySimple
+  1.2 Code optimizations
+  1.3 LoadFromFile/Stream now checks if header is UTF8
+  1.4 Removed ' from node attributes
+  1.5 Replaced string access with High/Low(string) for NextGen compiler compatibility
 
-  1.4 Remove ' from node attributes
-  Renamed to XmlVerySimple
+      XmlNode:
+        Attribute value is now escaped/unescaped
+        Added Name (same as NodeName)
+        Moved 'find' procedures over to TXmlNodeList
 
-  1.5 High/Low for String Index
+      Compact the XML now by using Options := [doCompact]
 
-  (c) Copyrights 2011 Dennis D. Spreen <dennis@spreendigital.de>
+      Added TXmlDocument compatible functions:
+        NodeValue (same as Text), NodeName (same as Name), Encoding (same as Header.Attribute['encoding']),
+        Version (same as Header.Attribute['version']), Options (the only compatible option is [doAutoIdent])
+        Xml.AddChild (replaces root node name), Xml.DocumentElement (same as root), Node.FirstChild (same as
+        Node.ChildNodes.First), Node.NextSibling, Node.PreviousSibling
+
+  (c) Copyrights 2011-2014 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
   any changes and the use of those changed library is permitted without
   limitations. Only requirement:
@@ -36,6 +48,11 @@ uses
 
 type
   TXmlNodeList = class;
+  TXmlNode = class;
+  TXmlNodeArray = TArray<TXmlNode>;
+
+  TXmlOption = (doNodeAutoIndent, doCompact);
+  TxmlOptions = set of TXmlOption;
 
   TXmlAttribute = class(TObject)
   public
@@ -45,70 +62,110 @@ type
 
   TXmlAttributeList = class(TObjectList<TXmlAttribute>)
   public
-    function Find(AttrName: String): TXmlAttribute;
+    function Find(const Name: String): TXmlAttribute; virtual;
     // Find an Attribute by Name (not case sensitive)
+    procedure Delete(const Name: String); overload; virtual;
+    function HasAttribute(const AttrName: String): Boolean; virtual;
   end;
 
   TXmlNode = class(TObject)
   private
-    FAttributes: TXmlAttributeList;
-    function GetAttribute(const AttrName: String): String;
-    procedure SetAttr(const AttrName: String; const Value: String);
+  protected
+    function GetAttr(const AttrName: String): String; virtual;
+    procedure SetAttr(const AttrName: String; const AttrValue: String); virtual;
   public
     Parent: TXmlNode; // NIL only for Root-Node
-    NodeName: String; // Node name
+    Name: String; // Node name
     ChildNodes: TXmlNodeList; // Child nodes, never NIL
     Text: String;
+    Attributes: TXmlAttributeList;
     constructor Create; virtual;
     destructor Destroy; override;
+    procedure Clear;
     // Find a childnode by its name
-    function Find(Name: String): TXmlNode; overload;
+    function Find(const Name: String): TXmlNode; overload;
     // Find a childnode by Name/Attribute
-    function Find(Name, Attribute: String): TXmlNode; overload;
+    function Find(const Name, AttrName: String): TXmlNode; overload;
     // Find a childnode by Name/Attribute/Value
-    function Find(Name, Attribute, Value: String): TXmlNode; overload;
+    function Find(const Name, AttrName, AttrValue: String): TXmlNode; overload;
     // Return a list of childodes with given Name
-    function FindNodes(Name: String): TXmlNodeList; virtual;
+    function FindNodes(const Name: String): TXmlNodeArray; virtual;
+
+    // Return a list of childodes with given Name
+    function GetNodes(const Name: String): TXmlNodeList; virtual;
+
     // Returns True if the Attribute exits
-    function HasAttribute(const Name: String): Boolean; virtual;
+    function HasAttribute(const AttrName: String): Boolean; virtual;
     // Returns True if this child nodes exists
     function HasChild(const Name: String): Boolean; virtual;
     // Add a child node and return it
     function AddChild(const Name: String): TXmlNode; virtual;
-    function InsertChild(const Name: String; Pos: Integer): TXmlNode; virtual;
-    function SetText(Value: String): TXmlNode; virtual;
-    function SetAttribute(const AttrName: String; const Value: String)
-      : TXmlNode; virtual;
-    property Attribute[const AttrName: String]: String read GetAttribute
-      write SetAttr; // Attributes of a Node, accessible by attribute name
+    function InsertChild(const Name: String; Position: Integer): TXmlNode; virtual;
+    function SetText(const Value: String): TXmlNode; virtual;
+    function SetAttribute(const AttrName, AttrValue: String): TXmlNode; virtual;
+    function FirstChild: TXmlNode;
+    function NextSibling: TXmlNode;
+    function PreviousSibling: TXmlNode;
+
+    // Attributes of a Node, accessible by attribute name
+    property Attribute[const AttrName: String]: String read GetAttr write SetAttr;
+
+    property NodeName: String read Name write Name;
+    property NodeValue: String read Text write Text;
   end;
 
-  TXmlNodeList = class(TObjectList<TXmlNode>);
+  TXmlNodeList = class(TObjectList<TXmlNode>)
+  public
+    // Find a node by its name
+    function Find(const Name: String): TXmlNode; overload;
+    function FindNode(const Name: String): TXmlNode;
+    // Find a node by Name/Attribute
+    function Find(const Name, AttrName: String): TXmlNode; overload;
+    // Find a node by Name/Attribute/Value
+    function Find(const Name, AttrName, AttrValue: String): TXmlNode; overload;
+    // Return a list of childodes with given Name
+    function FindNodes(const Name: String): TXmlNodeArray; virtual;
+
+    // Return a list of childodes with given Name
+    function GetNodes(const Name: String): TXmlNodeList; virtual;
+
+    function HasNode(Name: String): Boolean; virtual;
+    function Insert(const Name: String; Position: Integer): TXmlNode; overload;
+    function FirstChild: TXmlNode;
+    function NextSibling(Node: TXmlNode): TXmlNode;
+    function PreviousSibling(Node: TXmlNode): TXmlNode;
+  end;
 
   TXmlVerySimple = class(TObject)
   private
-    Lines: TStringList;
-    procedure Parse;
-    procedure Walk(Lines: TStringList; Prefix: String; Node: TXmlNode);
-    procedure SetText(Value: String);
+    procedure Parse(Lines: TStringList);
+    procedure Walk(Lines: TStringList; const Prefix: String; Node: TXmlNode);
+    procedure SetText(const Value: String);
     function GetText: String;
+    procedure SetEncoding(const Value: String);
+    function GetEncoding: String;
+    procedure SetVersion(const Value: String);
+    function GetVersion: String;
+  protected
   public
     Root: TXmlNode; // There is only one Root Node
     Header: TXmlNode; // XML declarations are stored in here as Attributes
     Ident: String; // Set Ident:='' if you want a compact output
+    Options: TXmlOptions;
     constructor Create; virtual;
     destructor Destroy; override;
     procedure Clear; virtual;
-    // Load XML from a file
-    procedure LoadFromFile(const FileName: String); virtual;
-    // Load XML for a stream
-    procedure LoadFromStream(const Stream: TStream); virtual;
-    // Encoding is specified in Header-Node
-    procedure SaveToStream(const Stream: TStream); virtual;
+    function AddChild(const Name: String): TXmlNode; virtual;
+    procedure LoadFromFile(const FileName: String); virtual;  // Load XML from a file
+    procedure LoadFromStream(const Stream: TStream); virtual; // Load XML for a stream
+    procedure SaveToStream(const Stream: TStream); virtual; // Encoding is specified in Header-Node
     procedure SaveToFile(const FileName: String); virtual;
-    class function Escape(Value: String): String;
-    class function UnEscape(Value: String): String;
+    class function Escape(const Value: String): String; virtual; // Convert special chars into escaped chars
+    class function UnEscape(const Value: String): String; virtual;  // Convert escaped chars into special chars
     property Text: String read GetText write SetText;
+    property Encoding: String read GetEncoding write SetEncoding;
+    property Version: String read GetVersion write SetVersion;
+    property DocumentElement: TXmlNode read Root;
   end;
 
 implementation
@@ -118,22 +175,28 @@ uses
 
 { TVerySimpleXml }
 
+function TXmlVerySimple.AddChild(const Name: String): TXmlNode;
+begin
+  Root.Name := Name;
+  Result := Root;
+end;
+
 procedure TXmlVerySimple.Clear;
 begin
-  Root.Free;
-  Header.Free;
-  Root := TXmlNode.Create;
-  Header := TXmlNode.Create;
-  Header.NodeName := '?xml'; // Default XML Header
-  Header.Attribute['version'] := '1.0'; // Default XML Version
-  Ident := '  '; // Set Ident:='' if you want a compact output
-  Lines.Clear;
+  Root.Clear;
+  Root.Name := '';
+  Header.Clear;
 end;
 
 constructor TXmlVerySimple.Create;
 begin
   inherited;
-  Lines := TStringList.Create;
+  Root := TXmlNode.Create;
+  Header := TXmlNode.Create;
+  Ident := '  ';
+  Header.Name := '?xml'; // Default XML Header
+  Version := '1.0'; // Default XML Version
+  Options := [doNodeAutoIndent];
   Clear;
 end;
 
@@ -141,62 +204,81 @@ destructor TXmlVerySimple.Destroy;
 begin
   Root.Free;
   Header.Free;
-  Lines.Free;
   inherited;
 end;
 
-class function TXmlVerySimple.Escape(Value: String): String;
+class function TXmlVerySimple.Escape(const Value: String): String;
 begin
   Result := ReplaceStr(Value, '&', '&amp;');
   Result := ReplaceStr(Result, '<', '&lt;');
   Result := ReplaceStr(Result, '>', '&gt;');
-  Result := ReplaceStr(Result, chr(39), '&apos;');
+  Result := ReplaceStr(Result, '''', '&apos;');
   Result := ReplaceStr(Result, '"', '&quot;');
 end;
 
-function TXmlVerySimple.GetText: String;
+function TXmlVerySimple.GetEncoding: String;
 begin
-  Lines.Clear;
-  if Ident = '' then
-    Lines.LineBreak := '';
+  Result := Header.Attribute['encoding'];
+end;
 
-  // Create XML introduction
-  Walk(Lines, '', Header);
+function TXmlVerySimple.GetText: String;
+var
+  Lines: TStringList;
+begin
+  Lines := TStringList.Create;
+  try
+    if doCompact in Options then
+      Lines.LineBreak := '';
 
-  // Create nodes representation
-  Walk(Lines, '', Root);
-  Result := Lines.Text;
+    // Create XML introduction
+    Walk(Lines, '', Header);
+
+    // Create nodes representation
+    Walk(Lines, '', Root);
+    Result := Lines.Text;
+  finally
+    Lines.Free;
+  end;
+end;
+
+
+function TXmlVerySimple.GetVersion: String;
+begin
+  Result := Header.Attribute['version'];
 end;
 
 procedure TXmlVerySimple.LoadFromFile(const FileName: String);
 var
-  Utf8: Boolean;
+  Stream: TFileStream;
 begin
-  Utf8 := (lowercase(Header.Attribute['encoding']) = 'utf-8');
-  Clear;
-  if Utf8 then
-    Lines.LoadFromFile(FileName, TEncoding.Utf8)
-  else
-    Lines.LoadFromFile(FileName);
-  Parse;
-  Lines.Clear;
+  Stream := TFileStream.Create(FileName, fmOpenRead);
+  try
+    LoadFromStream(Stream);
+  finally
+    Stream.Free;
+  end;
 end;
 
 procedure TXmlVerySimple.LoadFromStream(const Stream: TStream);
 var
-  Utf8: Boolean;
+  Lines: TStringList;
+  Encoding: TEncoding;
 begin
-  Utf8 := (lowercase(Header.Attribute['encoding']) = 'utf-8');
-  Clear;
-  if Utf8 then
-    Lines.LoadFromStream(Stream, TEncoding.Utf8)
-  else
-    Lines.LoadFromStream(Stream);
-  Parse;
-  Lines.Clear;
+  Lines := TStringList.Create;
+  try
+    if MatchText(Self.Encoding, ['utf-8', '']) then
+      Encoding := TEncoding.UTF8
+    else
+      Encoding := TEncoding.Default;
+    Clear;
+    Lines.LoadFromStream(Stream, Encoding);
+    Parse(Lines);
+  finally
+    Lines.Free;
+  end;
 end;
 
-procedure TXmlVerySimple.Parse;
+procedure TXmlVerySimple.Parse(Lines: TStringList);
 var
   Line: String;
   IsTag, IsText: Boolean;
@@ -209,8 +291,7 @@ var
   IsSelfClosing: Boolean;
 
   // Return a text ended by StopChar, <ul>respect quotation marks</ul>
-  function GetText(var Line: String; StartStr: String; StopChar: Char;
-    DeleteStopChar: Boolean): String;
+  function GetText(var Line: String; StartStr: String; StopChar: Char; DeleteStopChar: Boolean): String;
   begin
     while Length(Line) > 0 do
     begin
@@ -302,13 +383,11 @@ begin
 
                 if Length(AttrText) > 0 then
                 begin
-                  if (AttrText[Low(String)] = '"') or
-                    (AttrText[Low(String)] = '''') then
+                  if (AttrText[Low(String)] = '"') or (AttrText[Low(String)] = '''') then
                   // Remove start/end quotation marks
                   begin
                     Delete(AttrText, Low(String), 1);
-                    if (AttrText[High(AttrText)] = '"') or
-                      ((AttrText[High(AttrText)] = '''')) then
+                    if (AttrText[High(AttrText)] = '"') or ((AttrText[High(AttrText)] = '''')) then
                       Delete(AttrText, High(AttrText), 1);
                   end;
                 end;
@@ -319,12 +398,12 @@ begin
                   Attribute := TXmlAttribute.Create;
                   Attribute.Name := Attr;
                   Attribute.Value := UnEscape(AttrText);
-                  Node.FAttributes.Add(Attribute);
+                  Node.Attributes.Add(Attribute);
                 end;
               end;
             end;
 
-            Node.NodeName := Tag;
+            Node.Name := Tag;
             Node.Parent := Parent;
             if assigned(Parent) then
               Parent.ChildNodes.Add(Node)
@@ -371,71 +450,96 @@ end;
 procedure TXmlVerySimple.SaveToStream(const Stream: TStream);
 var
   Encoding: TEncoding;
+  Lines: TStringList;
 begin
-  GetText;
-  Encoding := TEncoding.Default;
-  if lowercase(Header.Attribute['encoding']) = 'utf-8' then
-    Encoding := TEncoding.Utf8;
-  Lines.SaveToStream(Stream, Encoding);
-  Lines.Clear;
+  Lines := TStringList.Create;
+  try
+    Lines.Text := GetText;
+    if MatchText(Self.Encoding, ['utf-8']) then
+      Encoding := TEncoding.UTF8
+    else
+      Encoding := TEncoding.Default;
+    Lines.SaveToStream(Stream, Encoding);
+  finally
+    Lines.Free;
+  end;
 end;
 
-procedure TXmlVerySimple.SetText(Value: String);
+procedure TXmlVerySimple.SetEncoding(const Value: String);
 begin
-  Clear;
-  Lines.Text := Value;
-  Parse;
-  Lines.Clear;
+  Header.Attribute['encoding'] := Value;
 end;
 
-class function TXmlVerySimple.UnEscape(Value: String): String;
+procedure TXmlVerySimple.SetText(const Value: String);
+var
+  Lines: TStringList;
+begin
+  Lines := TStringList.Create;
+  try
+    Lines.Text := Value;
+    Parse(Lines);
+  finally
+    Lines.Free;
+  end;
+end;
+
+procedure TXmlVerySimple.SetVersion(const Value: String);
+begin
+  Header.Attribute['version'] := Value;
+end;
+
+class function TXmlVerySimple.UnEscape(const Value: String): String;
 begin
   Result := ReplaceStr(Value, '&lt;', '<');
   Result := ReplaceStr(Result, '&gt;', '>');
-  Result := ReplaceStr(Result, '&apos;', chr(39));
   Result := ReplaceStr(Result, '&quot;', '"');
+  Result := ReplaceStr(Result, '&apos;', '''');
   Result := ReplaceStr(Result, '&amp;', '&');
 end;
 
-procedure TXmlVerySimple.Walk(Lines: TStringList; Prefix: String;
-  Node: TXmlNode);
+procedure TXmlVerySimple.Walk(Lines: TStringList; const Prefix: String; Node: TXmlNode);
 var
   Child: TXmlNode;
   Attribute: TXmlAttribute;
-  OriginalPrefix: String;
   S: String;
-  IsSelfClosing: Boolean;
+  TempIdent: String;
 begin
-  S := Prefix + '<' + Node.NodeName;
-  for Attribute in Node.FAttributes do
+  S := Prefix + '<' + Node.Name;
+  for Attribute in Node.Attributes do
     S := S + ' ' + Attribute.Name + '="' + Escape(Attribute.Value) + '"';
 
   if Node = Header then
-    S := S + ' ?';
+  begin
+    Lines.Add(S + ' ?>');
+    Exit;
+  end;
 
-  IsSelfClosing := (Length(Node.Text) = 0) and (Node.ChildNodes.Count = 0) and
-    (Node <> Header);
-  if IsSelfClosing then
-    S := S + ' /';
+  // Self closing tags
+  if (Node.Text = '') and (Node.ChildNodes.Count = 0) then
+   begin
+    Lines.Add(S + ' />');
+    Exit;
+  end;
 
   S := S + '>';
-  if Length(Node.Text) > 0 then
+  if Node.Text <> '' then
     S := S + Escape(Node.Text);
 
-  if (Node.ChildNodes.Count = 0) and (Length(Node.Text) > 0) then
+  if (Node.ChildNodes.Count = 0) and (Node.Text <> '') then
   begin
-    S := S + '</' + Node.NodeName + '>';
+    S := S + '</' + Node.Name + '>';
     Lines.Add(S);
   end
   else
   begin
     Lines.Add(S);
-    OriginalPrefix := Prefix;
-    Prefix := Prefix + Ident;
+    if (doNodeAutoIndent in Options) and (not (doCompact in Options)) then
+      TempIdent := Ident
+    else
+      TempIdent := '';
     for Child in Node.ChildNodes do
-      Walk(Lines, Prefix, Child);
-    if (Node <> Header) and (not IsSelfClosing) then
-      Lines.Add(OriginalPrefix + '</' + Node.NodeName + '>');
+      Walk(Lines, Prefix + TempIdent, Child);
+    Lines.Add(Prefix + '</' + Node.Name + '>');
   end;
 end;
 
@@ -444,129 +548,133 @@ end;
 function TXmlNode.AddChild(const Name: String): TXmlNode;
 begin
   Result := TXmlNode.Create;
-  Result.NodeName := Name;
-  Result.Parent := Self;
-  ChildNodes.Add(Result);
+  try
+    Result.Name := Name;
+    Result.Parent := Self;
+    ChildNodes.Add(Result);
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+procedure TXmlNode.Clear;
+begin
+  Text := '';
+  Attributes.Clear;
+  ChildNodes.Clear;
 end;
 
 constructor TXmlNode.Create;
 begin
   ChildNodes := TXmlNodeList.Create;
-  Parent := NIL;
-  FAttributes := TXmlAttributeList.Create;
+  Attributes := TXmlAttributeList.Create;
 end;
 
 destructor TXmlNode.Destroy;
 begin
-  FAttributes.Free;
+  if assigned(Parent) then
+    Parent.ChildNodes.Remove(Self);
+  Attributes.Free;
   ChildNodes.Free;
   inherited;
 end;
 
-function TXmlNode.Find(Name: String): TXmlNode;
-var
-  Node: TXmlNode;
+function TXmlNode.Find(const Name: String): TXmlNode;
 begin
-  Result := NIL;
-  Name := lowercase(Name);
-  for Node in ChildNodes do
-    if lowercase(Node.NodeName) = Name then
-    begin
-      Result := Node;
-      Break;
-    end;
+  Result := ChildNodes.Find(Name);
 end;
 
-function TXmlNode.Find(Name, Attribute, Value: String): TXmlNode;
-var
-  Node: TXmlNode;
+function TXmlNode.Find(const Name, AttrName, AttrValue: String): TXmlNode;
 begin
-  Result := NIL;
-  Name := lowercase(Name);
-  for Node in ChildNodes do
-    if (lowercase(Node.NodeName) = Name) and (Node.HasAttribute(Attribute)) and
-      (Node.Attribute[Attribute] = Value) then
-    begin
-      Result := Node;
-      Break;
-    end;
+  Result := ChildNodes.Find(Name, AttrName, AttrValue);
 end;
 
-function TXmlNode.Find(Name, Attribute: String): TXmlNode;
-var
-  Node: TXmlNode;
+function TXmlNode.Find(const Name, AttrName: String): TXmlNode;
 begin
-  Result := NIL;
-  Name := lowercase(Name);
-  for Node in ChildNodes do
-    if (lowercase(Node.NodeName) = Name) and (Node.HasAttribute(Attribute)) then
-    begin
-      Result := Node;
-      Break;
-    end;
+  Result := ChildNodes.Find(Name, AttrName);
 end;
 
-function TXmlNode.FindNodes(Name: String): TXmlNodeList;
-var
-  Node: TXmlNode;
+function TXmlNode.FindNodes(const Name: String): TXmlNodeArray;
 begin
-  Result := TXmlNodeList.Create(False);
-  Name := lowercase(Name);
-  for Node in ChildNodes do
-    if (lowercase(Node.NodeName) = Name) then
-      Result.Add(Node);
+  Result := ChildNodes.FindNodes(Name);
 end;
 
-function TXmlNode.GetAttribute(const AttrName: String): String;
+function TXmlNode.FirstChild: TXmlNode;
+begin
+  Result := ChildNodes.First;
+end;
+
+function TXmlNode.GetNodes(const Name: String): TXmlNodeList;
+begin
+  Result := ChildNodes.GetNodes(Name);
+end;
+
+function TXmlNode.GetAttr(const AttrName: String): String;
 var
   Attribute: TXmlAttribute;
 begin
-  Attribute := FAttributes.Find(AttrName);
-  if assigned(Attribute) then
+  Attribute := Attributes.Find(AttrName);
+  if Assigned(Attribute) then
     Result := Attribute.Value
   else
     Result := '';
 end;
 
-function TXmlNode.HasAttribute(const Name: String): Boolean;
+function TXmlNode.HasAttribute(const AttrName: String): Boolean;
 begin
-  Result := assigned(FAttributes.Find(Name));
+  Result := Attributes.HasAttribute(AttrName);
 end;
 
 function TXmlNode.HasChild(const Name: String): Boolean;
 begin
-  Result := assigned(Find(Name));
+  Result := ChildNodes.HasNode(Name);
 end;
 
-function TXmlNode.InsertChild(const Name: String; Pos: Integer): TXmlNode;
+function TXmlNode.InsertChild(const Name: String; Position: Integer): TXmlNode;
 begin
-  Result := TXmlNode.Create;
-  Result.NodeName := Name;
-  Result.Parent := Self;
-  ChildNodes.Insert(Pos, Result);
+  Result := ChildNodes.Insert(Name, Position);
+  if assigned(Result) then
+    Result.Parent := Self;
 end;
 
-procedure TXmlNode.SetAttr(const AttrName, Value: String);
+function TXmlNode.NextSibling: TXmlNode;
 begin
-  SetAttribute(AttrName, Value);
+  if not assigned(Parent) then
+    Result := NIL
+  else
+    Result := Parent.ChildNodes.NextSibling(Self);
 end;
 
-function TXmlNode.SetAttribute(const AttrName, Value: String): TXmlNode;
+function TXmlNode.PreviousSibling: TXmlNode;
+begin
+  if not assigned(Parent) then
+    Result := NIL
+  else
+    Result := Parent.ChildNodes.PreviousSibling(Self);
+end;
+
+procedure TXmlNode.SetAttr(const AttrName, AttrValue: String);
+begin
+  SetAttribute(AttrName, AttrValue);
+end;
+
+function TXmlNode.SetAttribute(const AttrName, AttrValue: String): TXmlNode;
 var
   Attribute: TXmlAttribute;
 begin
-  Attribute := FAttributes.Find(AttrName); // Search for given name
+  Attribute := Attributes.Find(AttrName); // Search for given name
   if not assigned(Attribute) then // If attribute is not found, create one
   begin
     Attribute := TXmlAttribute.Create;
-    FAttributes.Add(Attribute);
+    Attributes.Add(Attribute);
   end;
-  Attribute.Name := AttrName; // this allows "name-style" rewriting
-  Attribute.Value := TXmlVerySimple.Escape(Value);
+  Attribute.Name := AttrName; // this allows rewriting of the attribute name
+  Attribute.Value := AttrValue;
   Result := Self;
 end;
 
-function TXmlNode.SetText(Value: String): TXmlNode;
+function TXmlNode.SetText(const Value: String): TXmlNode;
 begin
   Text := Value;
   Result := Self;
@@ -574,18 +682,151 @@ end;
 
 { TXmlAttributeList }
 
-function TXmlAttributeList.Find(AttrName: String): TXmlAttribute;
+procedure TXmlAttributeList.Delete(const Name: String);
+var
+  Attribute: TXmlAttribute;
+begin
+  Attribute := Find(Name);
+  if Assigned(Attribute) then
+    Remove(Attribute);
+end;
+
+function TXmlAttributeList.Find(const Name: String): TXmlAttribute;
 var
   Attribute: TXmlAttribute;
 begin
   Result := NIL;
-  AttrName := lowercase(AttrName);
   for Attribute in Self do
-    if lowercase(Attribute.Name) = AttrName then
+    if AnsiSameText(Attribute.Name, Name) then
     begin
       Result := Attribute;
       Break;
     end;
+end;
+
+function TXmlAttributeList.HasAttribute(const AttrName: String): Boolean;
+begin
+  Result := Assigned(Find(AttrName));
+end;
+
+{ TXmlNodeList }
+
+function TXmlNodeList.Find(const Name: String): TXmlNode;
+var
+  Node: TXmlNode;
+begin
+  Result := NIL;
+  for Node in Self do
+    if AnsiSameText(Node.Name, Name) then
+    begin
+      Result := Node;
+      Break;
+    end;
+end;
+
+function TXmlNodeList.Find(const Name, AttrName, AttrValue: String): TXmlNode;
+var
+  Node: TXmlNode;
+begin
+  Result := NIL;
+  for Node in Self do
+    if (AnsiSameText(Node.Name, Name)) and (Node.HasAttribute(AttrName)) and
+      (AnsiSameStr(Node.Attribute[AttrName], AttrValue)) then
+    begin
+      Result := Node;
+      Break;
+    end;
+end;
+
+function TXmlNodeList.Find(const Name, AttrName: String): TXmlNode;
+var
+  Node: TXmlNode;
+begin
+  Result := NIL;
+  for Node in Self do
+    if AnsiSameText(Node.Name, Name) and Node.HasAttribute(AttrName) then
+    begin
+      Result := Node;
+      Break;
+    end;
+end;
+
+
+function TXmlNodeList.FindNode(const Name: String): TXmlNode;
+begin
+  Result := Find(Name);
+end;
+
+function TXmlNodeList.FindNodes(const Name: String): TXmlNodeArray;
+var
+  Node: TXmlNode;
+begin
+  SetLength(Result, 0);
+  for Node in Self do
+    if AnsiSameText(Node.Name, Name) then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := Node;
+    end;
+end;
+
+function TXmlNodeList.FirstChild: TXmlNode;
+begin
+  Result := First;
+end;
+
+function TXmlNodeList.GetNodes(const Name: String): TXmlNodeList;
+var
+  Node: TXmlNode;
+begin
+  Result := TXmlNodeList.Create(False);
+  try
+  for Node in Self do
+    if AnsiSameText(Node.Name, Name) then
+      Result.Add(Node);
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+function TXmlNodeList.HasNode(Name: String): Boolean;
+begin
+  Result := Assigned(Find(Name));
+end;
+
+function TXmlNodeList.Insert(const Name: String; Position: Integer): TXmlNode;
+begin
+  Result := TXmlNode.Create;
+  try
+    Result.Name := Name;
+    Insert(Position, Result);
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+function TXmlNodeList.NextSibling(Node: TXmlNode): TXmlNode;
+var
+  Index: Integer;
+begin
+  Index := Self.IndexOf(Node);
+  if (Index >= 0) and (Index + 1 < Count) then
+    Result := Self[Index]
+  else
+    Result := NIL;
+end;
+
+function TXmlNodeList.PreviousSibling(Node: TXmlNode): TXmlNode;
+var
+  Index: Integer;
+begin
+  Index := Self.IndexOf(Node);
+  if Index - 1 >= 0 then
+    Result := Self[Index]
+  else
+    Result := NIL;
 end;
 
 end.
