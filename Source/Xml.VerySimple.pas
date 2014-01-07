@@ -1,12 +1,14 @@
-{ VerySimpleXML v1.4 - a lightweight, one-unit XML reader/writer
+﻿{ VerySimpleXML v1.4 - a lightweight, one-unit XML reader/writer
   by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
   1.3 - LoadFromFile/Stream now checks if header is UTF8
-      - Removed "extended" quotation marks support
+  - Removed "extended" quotation marks support
 
   1.4 Remove ' from node attributes
-      Renamed to XmlVerySimple
+  Renamed to XmlVerySimple
+
+  1.5 High/Low for String Index
 
   (c) Copyrights 2011 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
@@ -25,7 +27,6 @@
   * implied. See the License for the specific language governing      *
   * rights and limitations under the License.                         *
 }
-
 unit Xml.VerySimple;
 
 interface
@@ -76,8 +77,8 @@ type
     function AddChild(const Name: String): TXmlNode; virtual;
     function InsertChild(const Name: String; Pos: Integer): TXmlNode; virtual;
     function SetText(Value: String): TXmlNode; virtual;
-    function SetAttribute(const AttrName: String;
-      const Value: String): TXmlNode; virtual;
+    function SetAttribute(const AttrName: String; const Value: String)
+      : TXmlNode; virtual;
     property Attribute[const AttrName: String]: String read GetAttribute
       write SetAttr; // Attributes of a Node, accessible by attribute name
   end;
@@ -91,8 +92,6 @@ type
     procedure Walk(Lines: TStringList; Prefix: String; Node: TXmlNode);
     procedure SetText(Value: String);
     function GetText: String;
-    function Escape(Value: String): String;
-    function UnEscape(Value: String): String;
   public
     Root: TXmlNode; // There is only one Root Node
     Header: TXmlNode; // XML declarations are stored in here as Attributes
@@ -107,6 +106,8 @@ type
     // Encoding is specified in Header-Node
     procedure SaveToStream(const Stream: TStream); virtual;
     procedure SaveToFile(const FileName: String); virtual;
+    class function Escape(Value: String): String;
+    class function UnEscape(Value: String): String;
     property Text: String read GetText write SetText;
   end;
 
@@ -144,7 +145,7 @@ begin
   inherited;
 end;
 
-function TXmlVerySimple.Escape(Value: String): String;
+class function TXmlVerySimple.Escape(Value: String): String;
 begin
   Result := ReplaceStr(Value, '&', '&amp;');
   Result := ReplaceStr(Result, '<', '&lt;');
@@ -174,7 +175,7 @@ begin
   Utf8 := (lowercase(Header.Attribute['encoding']) = 'utf-8');
   Clear;
   if Utf8 then
-    Lines.LoadFromFile(FileName, TEncoding.UTF8)
+    Lines.LoadFromFile(FileName, TEncoding.Utf8)
   else
     Lines.LoadFromFile(FileName);
   Parse;
@@ -188,7 +189,7 @@ begin
   Utf8 := (lowercase(Header.Attribute['encoding']) = 'utf-8');
   Clear;
   if Utf8 then
-    Lines.LoadFromStream(Stream, TEncoding.UTF8)
+    Lines.LoadFromStream(Stream, TEncoding.Utf8)
   else
     Lines.LoadFromStream(Stream);
   Parse;
@@ -207,13 +208,21 @@ var
   P: Integer;
   IsSelfClosing: Boolean;
 
-  // Return a text ended by StopChar, respect quotation marks
-  function GetText(var Line: String; StartStr: String; StopChar: Char): String;
+  // Return a text ended by StopChar, <ul>respect quotation marks</ul>
+  function GetText(var Line: String; StartStr: String; StopChar: Char;
+    DeleteStopChar: Boolean): String;
   begin
-    while (Length(Line) > 0) and ((Line[1] <> StopChar)) do
+    while Length(Line) > 0 do
     begin
-      StartStr := StartStr + Line[1];
-      delete(Line, 1, 1);
+      if (Line[Low(String)] = StopChar) then
+      begin
+        if DeleteStopChar then
+          Delete(Line, Low(String), 1);
+        Break;
+      end;
+
+      StartStr := StartStr + Line[Low(String)];
+      Delete(Line, Low(String), 1);
     end;
     Result := StartStr;
   end;
@@ -234,27 +243,27 @@ begin
     begin
       if (not IsTag) and (not IsText) then
       begin
-        while (Length(Line) > 0) and (Line[1] <> '<') do
-          delete(Line, 1, 1);
+        while (Length(Line) > 0) and (Line[Low(String)] <> '<') do
+          Delete(Line, Low(String), 1);
 
         if Length(Line) > 0 then
         begin
           IsTag := True;
-          delete(Line, 1, 1); // Delete openining tag
+          Delete(Line, Low(String), 1); // Delete openining tag
           Tag := '';
         end;
       end;
 
       if IsTag then
       begin
-        Tag := GetText(Line, Tag, '>');
+        Tag := GetText(Line, Tag, '>', False);
 
-        if (Length(Line) > 0) and (Line[1] = '>') then
+        if (Length(Line) > 0) and (Line[Low(String)] = '>') then
         begin
-          delete(Line, 1, 1);
+          Delete(Line, 1, 1);
           IsTag := False;
 
-          if (Length(Tag) > 0) and (Tag[1] = '/') then
+          if (Length(Tag) > 0) and (Tag[Low(String)] = '/') then
             Node := Node.Parent
           else
           begin
@@ -262,54 +271,54 @@ begin
             IsText := True;
 
             Node := TXmlNode.Create;
-            if lowercase(copy(Tag, 1, 4)) = '?xml' then // check for xml header
+            if lowercase(copy(Tag, Low(String), 4)) = '?xml' then
+            // check for xml header
             begin
               Header.Free;
               Header := Node;
             end;
 
             // Self-Closing Tag
-            if (Length(Tag) > 0) and (Tag[Length(Tag)] = '/') then
+            if (Length(Tag) > 0) and (Tag[High(Tag)] = '/') then // Length(Tag)
             begin
               IsSelfClosing := True;
-              delete(Tag, Length(Tag), 1);
+              Delete(Tag, High(Tag), 1); // Length(Tag)
             end
             else
               IsSelfClosing := False;
 
-            P := pos(' ', Tag);
+            P := Pos(' ', Tag);
             if P <> 0 then // Tag name has attributes
             begin
               ALine := Tag;
-              delete(Tag, P, Length(Tag));
-              delete(ALine, 1, P);
+              Delete(Tag, P, Length(Tag));
+              Delete(ALine, Low(String), P);
 
               while Length(ALine) > 0 do
               begin
-                Attr := GetText(ALine, '', '='); // Get Attribute Name
-                AttrText := GetText(ALine, '', ' '); // Get Attribute Value
+                Attr := GetText(ALine, '', '=', True); // Get Attribute Name
+                AttrText := GetText(ALine, '', ' ', True);
+                // Get Attribute Value
 
                 if Length(AttrText) > 0 then
                 begin
-                  delete(AttrText, 1, 1); // Remove blank
-
-                  if (AttrText[1] = '"') or (AttrText[1] = '''') then // Remove start/end quotation marks
+                  if (AttrText[Low(String)] = '"') or
+                    (AttrText[Low(String)] = '''') then
+                  // Remove start/end quotation marks
                   begin
-                    delete(AttrText, 1, 1);
-                    if (AttrText[Length(AttrText)] = '"') or ((AttrText[Length(AttrText)] = '''')) then
-                      delete(AttrText, Length(AttrText), 1);
+                    Delete(AttrText, Low(String), 1);
+                    if (AttrText[High(AttrText)] = '"') or
+                      ((AttrText[High(AttrText)] = '''')) then
+                      Delete(AttrText, High(AttrText), 1);
                   end;
                 end;
-
-                if Length(ALine) > 0 then
-                  delete(ALine, 1, 1);
 
                 // Header node (Attr='?') does not support Attributes
                 if not((Node = Header) and (Attr = '?')) then
                 begin
                   Attribute := TXmlAttribute.Create;
                   Attribute.Name := Attr;
-                  Attribute.Value := AttrText;
+                  Attribute.Value := UnEscape(AttrText);
                   Node.FAttributes.Add(Attribute);
                 end;
               end;
@@ -336,12 +345,12 @@ begin
 
       if IsText then
       begin
-        Text := GetText(Line, Text, '<');
-        if (Length(Line) > 0) and (Line[1] = '<') then
+        Text := GetText(Line, Text, '<', False);
+        if (Length(Line) > 0) and (Line[Low(String)] = '<') then
         begin
           IsText := False;
-          while (Length(Text) > 0) and (Text[1] = ' ') do
-            delete(Text, 1, 1);
+          while (Length(Text) > 0) and (Text[Low(String)] = ' ') do
+            Delete(Text, Low(String), 1);
           Node.Text := UnEscape(Text);
         end;
       end;
@@ -366,7 +375,7 @@ begin
   GetText;
   Encoding := TEncoding.Default;
   if lowercase(Header.Attribute['encoding']) = 'utf-8' then
-    Encoding := TEncoding.UTF8;
+    Encoding := TEncoding.Utf8;
   Lines.SaveToStream(Stream, Encoding);
   Lines.Clear;
 end;
@@ -379,9 +388,9 @@ begin
   Lines.Clear;
 end;
 
-function TXmlVerySimple.UnEscape(Value: String): String;
+class function TXmlVerySimple.UnEscape(Value: String): String;
 begin
-  Result := ReplaceStr(Value, '&lt;', '<' );
+  Result := ReplaceStr(Value, '&lt;', '<');
   Result := ReplaceStr(Result, '&gt;', '>');
   Result := ReplaceStr(Result, '&apos;', chr(39));
   Result := ReplaceStr(Result, '&quot;', '"');
@@ -399,7 +408,7 @@ var
 begin
   S := Prefix + '<' + Node.NodeName;
   for Attribute in Node.FAttributes do
-    S := S + ' ' + Attribute.Name + '="' + Attribute.Value + '"';
+    S := S + ' ' + Attribute.Name + '="' + Escape(Attribute.Value) + '"';
 
   if Node = Header then
     S := S + ' ?';
@@ -553,7 +562,7 @@ begin
     FAttributes.Add(Attribute);
   end;
   Attribute.Name := AttrName; // this allows "name-style" rewriting
-  Attribute.Value := Value;
+  Attribute.Value := TXmlVerySimple.Escape(Value);
   Result := Self;
 end;
 
