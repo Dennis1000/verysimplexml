@@ -3,18 +3,19 @@ unit Main;
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
-  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Xml.VerySimple, ExampleClass;
+  System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
+  FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.Layouts, FMX.Memo, FMX.StdCtrls,
+  Xml.VerySimple;
 
 type
   TFrmMain = class(TForm)
     BtnGenerate: TButton;
-    Memo1: TMemo;
     BtnModify: TButton;
     BtnCompact: TButton;
     BtnSave: TButton;
     BtnLoad: TButton;
     BtnGet: TButton;
+    Memo1: TMemo;
     procedure BtnGenerateClick(Sender: TObject);
     procedure BtnModifyClick(Sender: TObject);
     procedure BtnCompactClick(Sender: TObject);
@@ -34,7 +35,10 @@ var
 
 implementation
 
-{$R *.dfm}
+{$R *.fmx}
+
+uses
+  ExampleClass;
 
 procedure TFrmMain.BtnCompactClick(Sender: TObject);
 var
@@ -64,7 +68,6 @@ begin
   BtnModify.Enabled := True;
 end;
 
-
 procedure TFrmMain.BtnGetClick(Sender: TObject);
 var
   Xml: TXmlVerySimple;
@@ -77,6 +80,19 @@ begin
 
   BtnGet.Enabled := False;
   BtnGenerate.Enabled := True;
+end;
+
+procedure TFrmMain.BtnLoadClick(Sender: TObject);
+var
+  Xml: TXmlVerySimple;
+begin
+  Xml := TXmlVerySimple.Create;
+  Xml.LoadFromFile('example.xml');
+  ShowXml(Xml);
+  Xml.Free;
+
+  BtnLoad.Enabled := False;
+  BtnGet.Enabled := True;
 end;
 
 procedure TFrmMain.BtnModifyClick(Sender: TObject);
@@ -95,7 +111,6 @@ begin
   BtnModify.Enabled := False;
   BtnCompact.Enabled := True;
 end;
-
 
 procedure TFrmMain.BtnSaveClick(Sender: TObject);
 var
@@ -128,21 +143,4 @@ begin
   Stream.Free;
 end;
 
-
-procedure TFrmMain.BtnLoadClick(Sender: TObject);
-var
-  Xml: TXmlVerySimple;
-begin
-  Xml := TXmlVerySimple.Create;
-  Xml.LoadFromFile('example.xml');
-  ShowXml(Xml);
-  Xml.Free;
-
-  BtnLoad.Enabled := False;
-  BtnGet.Enabled := True;
-end;
-
 end.
-
-
-
