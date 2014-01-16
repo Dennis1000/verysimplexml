@@ -4,23 +4,23 @@
 
   1.0 Initial release
   1.1 Removed "extended" quotation marks support, Renamed to XmlVerySimple
-  1.2 Code optimizations
+  1.2 Switched to TStreamReader
   1.3 LoadFromFile/Stream now checks if header is UTF8
   1.4 Removed ' from node attributes
   1.5 Replaced string access with High/Low(string) for NextGen compiler compatibility
-
+      Compact the XML now by using Options := [doCompact]
       XmlNode:
         Attribute value is now escaped/unescaped
+        Attribute['tag'] is now Attributes['tag'] (TXmlDocument compatible), all attributes are found in AttributeList
         Added Name (same as NodeName)
         Moved 'find' procedures over to TXmlNodeList
-
-      Compact the XML now by using Options := [doCompact]
-
       Added TXmlDocument compatible functions:
         NodeValue (same as Text), NodeName (same as Name), Encoding (same as Header.Attribute['encoding']),
         Version (same as Header.Attribute['version']), Options (the only compatible option is [doAutoIdent])
         Xml.AddChild (replaces root node name), Xml.DocumentElement (same as root), Node.FirstChild (same as
-        Node.ChildNodes.First), Node.NextSibling, Node.PreviousSibling
+        Node.ChildNodes.First), Node.LastChild (same as Node.ChildNodes.Last), Node.NextSibling, Node.PreviousSibling
+
+  1.6 Added comment nodes (see NodeType property)
 
   (c) Copyrights 2011-2014 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
@@ -44,15 +44,21 @@ unit Xml.VerySimple;
 interface
 
 uses
-  Classes, Generics.Defaults, Generics.Collections;
+  Classes, SysUtils, Generics.Defaults, Generics.Collections;
 
 type
   TXmlNodeList = class;
   TXmlNode = class;
   TXmlNodeArray = TArray<TXmlNode>;
 
-  TXmlOption = (doNodeAutoIndent, doCompact);
-  TxmlOptions = set of TXmlOption;
+  TxmlOptions = set of (doNodeAutoIndent, doCompact);
+  TXmlNodeType = (ntText, ntComment);
+
+  TExtractTextOptions = set of (etoDeleteStopChar, etoLocalLine);
+  TXmlStreamReader = class(TStreamReader)
+  public
+    function ExtractText(var Line: String; StopChars: TSysCharSet; Options: TExtractTextOptions): String;
+  end;
 
   TXmlAttribute = class(TObject)
   public
@@ -78,7 +84,8 @@ type
     Name: String; // Node name
     ChildNodes: TXmlNodeList; // Child nodes, never NIL
     Text: String;
-    Attributes: TXmlAttributeList;
+    AttributeList: TXmlAttributeList;
+    NodeType: TXmlNodeType;
     constructor Create; virtual;
     destructor Destroy; override;
     procedure Clear;
@@ -104,11 +111,14 @@ type
     function SetText(const Value: String): TXmlNode; virtual;
     function SetAttribute(const AttrName, AttrValue: String): TXmlNode; virtual;
     function FirstChild: TXmlNode;
-    function NextSibling: TXmlNode;
-    function PreviousSibling: TXmlNode;
+    function LastChild: TXmlNode;
+    function NextSibling: TXmlNode; overload;
+    function PreviousSibling: TXmlNode; overload;
+    function HasChildNodes: Boolean;
+    function SetNodeType(Value: TXmlNodeType): TXmlNode;
 
     // Attributes of a Node, accessible by attribute name
-    property Attribute[const AttrName: String]: String read GetAttr write SetAttr;
+    property Attributes[const AttrName: String]: String read GetAttr write SetAttr;
 
     property NodeName: String read Name write Name;
     property NodeValue: String read Text write Text;
@@ -116,6 +126,7 @@ type
 
   TXmlNodeList = class(TObjectList<TXmlNode>)
   public
+    Node: TXmlNode;
     // Find a node by its name
     function Find(const Name: String): TXmlNode; overload;
     function FindNode(const Name: String): TXmlNode;
@@ -134,11 +145,12 @@ type
     function FirstChild: TXmlNode;
     function NextSibling(Node: TXmlNode): TXmlNode;
     function PreviousSibling(Node: TXmlNode): TXmlNode;
+    function Add(Value: TXmlNode): Integer; overload;
   end;
 
   TXmlVerySimple = class(TObject)
   private
-    procedure Parse(Lines: TStringList);
+    procedure Parse(Reader: TXmlStreamReader);
     procedure Walk(Lines: TStringList; const Prefix: String; Node: TXmlNode);
     procedure SetText(const Value: String);
     function GetText: String;
@@ -146,6 +158,7 @@ type
     function GetEncoding: String;
     procedure SetVersion(const Value: String);
     function GetVersion: String;
+    procedure Compose(Lines: TStringList);
   protected
   public
     Root: TXmlNode; // There is only one Root Node
@@ -161,7 +174,7 @@ type
     procedure SaveToStream(const Stream: TStream); virtual; // Encoding is specified in Header-Node
     procedure SaveToFile(const FileName: String); virtual;
     class function Escape(const Value: String): String; virtual; // Convert special chars into escaped chars
-    class function UnEscape(const Value: String): String; virtual;  // Convert escaped chars into special chars
+    class function UnEscape(const Value: String): String; virtual;  // Convert escaped chars back into chars
     property Text: String read GetText write SetText;
     property Encoding: String read GetEncoding write SetEncoding;
     property Version: String read GetVersion write SetVersion;
@@ -171,7 +184,7 @@ type
 implementation
 
 uses
-  SysUtils, StrUtils;
+  StrUtils;
 
 { TVerySimpleXml }
 
@@ -187,6 +200,7 @@ begin
   Root.Name := '';
   Header.Clear;
 end;
+
 
 constructor TXmlVerySimple.Create;
 begin
@@ -215,9 +229,22 @@ begin
   Result := ReplaceStr(Result, '"', '&quot;');
 end;
 
+
 function TXmlVerySimple.GetEncoding: String;
 begin
-  Result := Header.Attribute['encoding'];
+  Result := Header.Attributes['encoding'];
+end;
+
+procedure TXmlVerySimple.Compose(Lines: TStringList);
+begin
+  if doCompact in Options then
+    Lines.LineBreak := '';
+
+  // Create XML introduction
+  Walk(Lines, '', Header);
+
+  // Create nodes representation
+  Walk(Lines, '', Root);
 end;
 
 function TXmlVerySimple.GetText: String;
@@ -226,14 +253,7 @@ var
 begin
   Lines := TStringList.Create;
   try
-    if doCompact in Options then
-      Lines.LineBreak := '';
-
-    // Create XML introduction
-    Walk(Lines, '', Header);
-
-    // Create nodes representation
-    Walk(Lines, '', Root);
+    Compose(Lines);
     Result := Lines.Text;
   finally
     Lines.Free;
@@ -243,7 +263,7 @@ end;
 
 function TXmlVerySimple.GetVersion: String;
 begin
-  Result := Header.Attribute['version'];
+  Result := Header.Attributes['version'];
 end;
 
 procedure TXmlVerySimple.LoadFromFile(const FileName: String);
@@ -260,173 +280,171 @@ end;
 
 procedure TXmlVerySimple.LoadFromStream(const Stream: TStream);
 var
-  Lines: TStringList;
-  Encoding: TEncoding;
+  Reader: TXmlStreamReader;
 begin
-  Lines := TStringList.Create;
+  Clear;
+  if AnsiSameText(Self.Encoding, 'utf-8') then
+    Reader := TXmlStreamReader.Create(Stream, TEncoding.UTF8)
+  else
+    Reader := TXmlStreamReader.Create(Stream, True);
   try
-    if AnsiSameText(Self.Encoding, 'utf-8') then
-      Encoding := TEncoding.UTF8
-    else
-      Encoding := TEncoding.Default;
-    Clear;
-    Lines.LoadFromStream(Stream, Encoding);
-    Parse(Lines);
+    Parse(Reader);
   finally
-    Lines.Free;
+    Reader.Free;
   end;
 end;
 
-procedure TXmlVerySimple.Parse(Lines: TStringList);
+procedure TXmlVerySimple.Parse(Reader: TXmlStreamReader);
 var
   Line: String;
-  IsTag, IsText: Boolean;
+  IsTag, IsText, IsComment: Boolean;
   Tag, Text: String;
   Parent, Node: TXmlNode;
-  I: Integer;
   Attribute: TXmlAttribute;
   ALine, Attr, AttrText: String;
   P: Integer;
   IsSelfClosing: Boolean;
-
-  // Return a text ended by StopChar, <ul>respect quotation marks</ul>
-  function GetText(var Line: String; StartStr: String; StopChar: Char; DeleteStopChar: Boolean): String;
-  begin
-    while Length(Line) > 0 do
-    begin
-      if (Line[Low(String)] = StopChar) then
-      begin
-        if DeleteStopChar then
-          Delete(Line, Low(String), 1);
-        Break;
-      end;
-
-      StartStr := StartStr + Line[Low(String)];
-      Delete(Line, Low(String), 1);
-    end;
-    Result := StartStr;
-  end;
-
+  Quote: Char;
 begin
   if assigned(Root) then // Release previous nodes (if set)
     Root.Free;
 
+  Clear;
   IsTag := False;
   IsText := False;
+  IsComment := False;
   Node := NIL;
 
-  for I := 0 to Lines.Count - 1 do
+  while not Reader.EndOfStream do
   begin
-    Line := Lines[I];
-
+    Line := Reader.ReadLine;
     while (Length(Line) > 0) do
     begin
-      if (not IsTag) and (not IsText) then
+      if (not IsTag) and (not IsText) and (not IsComment) then
       begin
-        while (Length(Line) > 0) and (Line[Low(String)] <> '<') do
-          Delete(Line, Low(String), 1);
-
+        Reader.ExtractText(Line, ['<'], [etoDeleteStopChar]);
         if Length(Line) > 0 then
         begin
-          IsTag := True;
-          Delete(Line, Low(String), 1); // Delete openining tag
-          Tag := '';
+          // check for a comment node
+          if Copy(Line, Low(String), 3) = '!--' then
+          begin
+            Delete(Line, Low(String), 3);
+            Parent := Node;
+            if assigned(Parent) then  // ignore comments before XML declaration
+            begin
+              Node := TXmlNode.Create;
+              Node.NodeType := ntComment;
+              Parent.ChildNodes.Add(Node);
+              IsComment := True;
+            end;
+          end
+          else
+            IsTag := True;
         end;
       end;
 
+      if IsComment then
+      begin
+        P := Pos('-->', Line);
+        if P >= Low(String) then
+        begin
+          Node.Text := Node.Text + Copy(Line, Low(String), P);
+          Delete(Line, Low(String), P + Low(String) + 1);
+          IsComment := False;
+          Node := Node.Parent;
+        end
+        else
+        begin
+          if Node.Text <> '' then
+            Node.Text := Node.Text + sLineBreak;
+          Node.Text := Node.Text + Line;
+        end;
+      end;
+
+
       if IsTag then
       begin
-        Tag := GetText(Line, Tag, '>', False);
+        Tag := Reader.ExtractText(Line, ['>'], [etoDeleteStopChar]);
+        IsTag := False;
 
-        if (Length(Line) > 0) and (Line[Low(String)] = '>') then
+        if (Length(Tag) > 0) and (Tag[Low(Tag)] = '/') then
+          Node := Node.Parent
+        else
         begin
-          Delete(Line, 1, 1);
-          IsTag := False;
+          Parent := Node;
+          IsText := True;
 
-          if (Length(Tag) > 0) and (Tag[Low(String)] = '/') then
-            Node := Node.Parent
-          else
+          Node := TXmlNode.Create;
+
+          // check for xml header
+          if lowercase(copy(Tag, Low(String), 4)) = '?xml' then
           begin
-            Parent := Node;
-            IsText := True;
+            Header.Free;
+            Header := Node;
+          end;
 
-            Node := TXmlNode.Create;
-            if lowercase(copy(Tag, Low(String), 4)) = '?xml' then
-            // check for xml header
+          // Self-Closing Tag
+          if (Length(Tag) > 0) and (Tag[High(Tag)] = '/') then // Length(Tag)
+          begin
+            IsSelfClosing := True;
+            Delete(Tag, High(Tag), 1); // Length(Tag)
+          end
+          else
+            IsSelfClosing := False;
+
+          P := Pos(' ', Tag);
+          if P >= Low(String) then // Tag name has attributes
+          begin
+            ALine := Tag;
+            Delete(Tag, P, Length(Tag));
+            Delete(ALine, Low(String), P);
+
+            while Length(ALine) > 0 do
             begin
-              Header.Free;
-              Header := Node;
-            end;
+              Attr := TrimLeft(Reader.ExtractText(ALine, ['='], [etoDeleteStopChar, etoLocalLine])); // Get Attribute Name
 
-            // Self-Closing Tag
-            if (Length(Tag) > 0) and (Tag[High(Tag)] = '/') then // Length(Tag)
-            begin
-              IsSelfClosing := True;
-              Delete(Tag, High(Tag), 1); // Length(Tag)
-            end
-            else
-              IsSelfClosing := False;
+              while (Attr <> '') and (Attr[High(Attr)]=' ') do  // if a space before equal sign then delete it
+                Delete(Attr, High(Attr), 1);
 
-            P := Pos(' ', Tag);
-            if P <> 0 then // Tag name has attributes
-            begin
-              ALine := Tag;
-              Delete(Tag, P, Length(Tag));
-              Delete(ALine, Low(String), P);
-
-              while Length(ALine) > 0 do
+              // Header node (Attr='?') does not support Attributes
+              if (not((Node = Header) and (Attr = '?')) and (Attr<>''))  then
               begin
-                Attr := GetText(ALine, '', '=', True); // Get Attribute Name
-                AttrText := GetText(ALine, '', ' ', True); // Get Attribute Value
-
-                // remove closing instruction marker "?"
-                if (Node = Header) and (ALine = '') and (AttrText <> '') and (AttrText[High(AttrText)]='?') then
-                  Delete(AttrText, High(AttrText), 1);
-
-                if Length(AttrText) > 0 then
+                Attribute := TXmlAttribute.Create;
+                Attribute.Name := Attr;
+                Reader.ExtractText(ALine, ['''', '"'], [etoLocalLine]);
+                ALine := TrimLeft(ALine);
+                if ALine <> '' then
                 begin
-                  if (AttrText[Low(String)] = '"') or (AttrText[Low(String)] = '''') then
-                  // Remove start/end quotation marks
-                  begin
-                    Delete(AttrText, Low(String), 1);
-                    if (AttrText[High(AttrText)] = '"') or ((AttrText[High(AttrText)] = '''')) then
-                      Delete(AttrText, High(AttrText), 1);
-                  end;
-                end;
-
-                // Header node (Attr='?') does not support Attributes
-                if not((Node = Header) and (Attr = '?')) then
-                begin
-                  Attribute := TXmlAttribute.Create;
-                  Attribute.Name := Attr;
+                  Quote := ALine[Low(String)];
+                  Delete(ALine, Low(String), 1);
+                  AttrText := Reader.ExtractText(ALine, [Quote], [etoDeleteStopChar, etoLocalLine]); // Get Attribute Value
                   Attribute.Value := UnEscape(AttrText);
-                  Node.Attributes.Add(Attribute);
                 end;
+                Node.AttributeList.Add(Attribute);
               end;
             end;
-
-            Node.Name := Tag;
-            Node.Parent := Parent;
-            if assigned(Parent) then
-              Parent.ChildNodes.Add(Node)
-            else if Node = Header then
-            begin
-              IsText := False;
-              Node := NIL;
-            end
-            else
-              Root := Node;
-
-            Text := '';
-            if IsSelfClosing then
-              Node := Node.Parent;
           end;
+
+          Node.Name := Tag;
+          if assigned(Parent) then
+            Parent.ChildNodes.Add(Node)
+          else if Node = Header then
+          begin
+            IsText := False;
+            Node := NIL;
+          end
+          else
+            Root := Node;
+
+          Text := '';
+          if IsSelfClosing then
+            Node := Node.Parent;
         end;
       end;
 
       if IsText then
       begin
-        Text := GetText(Line, Text, '<', False);
+        Text := Text + Reader.ExtractText(Line, ['<'], []);
         if (Length(Line) > 0) and (Line[Low(String)] = '<') then
         begin
           IsText := False;
@@ -456,7 +474,7 @@ var
 begin
   Lines := TStringList.Create;
   try
-    Lines.Text := GetText;
+    Compose(Lines);
     if AnsiSameText(Self.Encoding, 'utf-8') then
       Encoding := TEncoding.UTF8
     else
@@ -469,25 +487,23 @@ end;
 
 procedure TXmlVerySimple.SetEncoding(const Value: String);
 begin
-  Header.Attribute['encoding'] := Value;
+  Header.Attributes['encoding'] := Value;
 end;
 
 procedure TXmlVerySimple.SetText(const Value: String);
 var
-  Lines: TStringList;
+  Stream: TStringStream;
 begin
-  Lines := TStringList.Create;
-  try
-    Lines.Text := Value;
-    Parse(Lines);
-  finally
-    Lines.Free;
-  end;
+  Stream := TStringStream.Create;
+  Stream.WriteString(Value);
+  Stream.Position := 0;
+  LoadFromStream(Stream);
+  Stream.Free;
 end;
 
 procedure TXmlVerySimple.SetVersion(const Value: String);
 begin
-  Header.Attribute['version'] := Value;
+  Header.Attributes['version'] := Value;
 end;
 
 class function TXmlVerySimple.UnEscape(const Value: String): String;
@@ -506,18 +522,22 @@ var
   S: String;
   TempIdent: String;
 begin
-  S := Prefix + '<' + Node.Name;
-  for Attribute in Node.Attributes do
-    S := S + ' ' + Attribute.Name + '="' + Escape(Attribute.Value) + '"';
-
-  if Node = Header then
+  S := Prefix + '<';
+  if Node.NodeType = ntComment then
   begin
-    Lines.Add(S + '?>');
+    Lines.Add(S + '!--' + Node.Text + '-->');
     Exit;
   end;
 
+  S := S + Node.Name;
+  for Attribute in Node.AttributeList do
+    S := S + ' ' + Attribute.Name + '="' + Escape(Attribute.Value) + '"';
+
+  if Node = Header then
+    S := S + '?';
+
   // Self closing tags
-  if (Node.Text = '') and (Node.ChildNodes.Count = 0) then
+  if (Node.Text = '') and (not Node.HasChildNodes) and (Node <> Header) then
    begin
     Lines.Add(S + ' />');
     Exit;
@@ -527,7 +547,7 @@ begin
   if Node.Text <> '' then
     S := S + Escape(Node.Text);
 
-  if (Node.ChildNodes.Count = 0) and (Node.Text <> '') then
+  if (not Node.HasChildNodes) and (Node.Text <> '') and (Node <> Header) then
   begin
     S := S + '</' + Node.Name + '>';
     Lines.Add(S);
@@ -535,13 +555,14 @@ begin
   else
   begin
     Lines.Add(S);
-    if (doNodeAutoIndent in Options) and (not (doCompact in Options)) then
+    if (doNodeAutoIndent in Options) and (not (doCompact in Options)) and (Node <> Header) then
       TempIdent := Ident
     else
       TempIdent := '';
     for Child in Node.ChildNodes do
       Walk(Lines, Prefix + TempIdent, Child);
-    Lines.Add(Prefix + '</' + Node.Name + '>');
+    if Node <> Header then
+      Lines.Add(Prefix + '</' + Node.Name + '>');
   end;
 end;
 
@@ -552,7 +573,6 @@ begin
   Result := TXmlNode.Create;
   try
     Result.Name := Name;
-    Result.Parent := Self;
     ChildNodes.Add(Result);
   except
     Result.Free;
@@ -563,21 +583,23 @@ end;
 procedure TXmlNode.Clear;
 begin
   Text := '';
-  Attributes.Clear;
+  AttributeList.Clear;
   ChildNodes.Clear;
 end;
 
 constructor TXmlNode.Create;
 begin
   ChildNodes := TXmlNodeList.Create;
-  Attributes := TXmlAttributeList.Create;
+  ChildNodes.Node := Self;
+  AttributeList := TXmlAttributeList.Create;
+  NodeType := ntText;
 end;
 
 destructor TXmlNode.Destroy;
 begin
   if assigned(Parent) then
     Parent.ChildNodes.Remove(Self);
-  Attributes.Free;
+  AttributeList.Free;
   ChildNodes.Free;
   inherited;
 end;
@@ -607,6 +629,7 @@ begin
   Result := ChildNodes.First;
 end;
 
+
 function TXmlNode.GetNodes(const Name: String): TXmlNodeList;
 begin
   Result := ChildNodes.GetNodes(Name);
@@ -616,7 +639,7 @@ function TXmlNode.GetAttr(const AttrName: String): String;
 var
   Attribute: TXmlAttribute;
 begin
-  Attribute := Attributes.Find(AttrName);
+  Attribute := AttributeList.Find(AttrName);
   if Assigned(Attribute) then
     Result := Attribute.Value
   else
@@ -625,7 +648,7 @@ end;
 
 function TXmlNode.HasAttribute(const AttrName: String): Boolean;
 begin
-  Result := Attributes.HasAttribute(AttrName);
+  Result := AttributeList.HasAttribute(AttrName);
 end;
 
 function TXmlNode.HasChild(const Name: String): Boolean;
@@ -633,11 +656,21 @@ begin
   Result := ChildNodes.HasNode(Name);
 end;
 
+function TXmlNode.HasChildNodes: Boolean;
+begin
+  Result := (ChildNodes.Count > 0);
+end;
+
 function TXmlNode.InsertChild(const Name: String; Position: Integer): TXmlNode;
 begin
   Result := ChildNodes.Insert(Name, Position);
   if assigned(Result) then
     Result.Parent := Self;
+end;
+
+function TXmlNode.LastChild: TXmlNode;
+begin
+  Result := ChildNodes.Last;
 end;
 
 function TXmlNode.NextSibling: TXmlNode;
@@ -665,14 +698,20 @@ function TXmlNode.SetAttribute(const AttrName, AttrValue: String): TXmlNode;
 var
   Attribute: TXmlAttribute;
 begin
-  Attribute := Attributes.Find(AttrName); // Search for given name
+  Attribute := AttributeList.Find(AttrName); // Search for given name
   if not assigned(Attribute) then // If attribute is not found, create one
   begin
     Attribute := TXmlAttribute.Create;
-    Attributes.Add(Attribute);
+    AttributeList.Add(Attribute);
   end;
   Attribute.Name := AttrName; // this allows rewriting of the attribute name
   Attribute.Value := AttrValue;
+  Result := Self;
+end;
+
+function TXmlNode.SetNodeType(Value: TXmlNodeType): TXmlNode;
+begin
+  NodeType := Value;
   Result := Self;
 end;
 
@@ -681,6 +720,7 @@ begin
   Text := Value;
   Result := Self;
 end;
+
 
 { TXmlAttributeList }
 
@@ -726,6 +766,12 @@ begin
     end;
 end;
 
+function TXmlNodeList.Add(Value: TXmlNode): Integer;
+begin
+  Result := inherited Add(Value);
+  Value.Parent := Node;
+end;
+
 function TXmlNodeList.Find(const Name, AttrName, AttrValue: String): TXmlNode;
 var
   Node: TXmlNode;
@@ -733,7 +779,7 @@ begin
   Result := NIL;
   for Node in Self do
     if (AnsiSameText(Node.Name, Name)) and (Node.HasAttribute(AttrName)) and
-      (AnsiSameStr(Node.Attribute[AttrName], AttrValue)) then
+      (AnsiSameStr(Node.Attributes[AttrName], AttrValue)) then
     begin
       Result := Node;
       Break;
@@ -813,11 +859,16 @@ function TXmlNodeList.NextSibling(Node: TXmlNode): TXmlNode;
 var
   Index: Integer;
 begin
-  Index := Self.IndexOf(Node);
-  if (Index >= 0) and (Index + 1 < Count) then
-    Result := Self[Index]
+  if (not assigned(Node)) and (Count > 0) then
+    Result := First
   else
-    Result := NIL;
+  begin
+    Index := Self.IndexOf(Node);
+    if (Index >= 0) and (Index + 1 < Count) then
+      Result := Self[Index]
+    else
+      Result := NIL;
+  end;
 end;
 
 function TXmlNodeList.PreviousSibling(Node: TXmlNode): TXmlNode;
@@ -830,5 +881,31 @@ begin
   else
     Result := NIL;
 end;
+
+{ TXmlStreamReader }
+
+function TXmlStreamReader.ExtractText(var Line: String; StopChars: TSysCharSet;
+  Options: TExtractTextOptions): String;
+begin
+  Result := '';
+  repeat
+    while Length(Line) > 0 do
+    begin
+      if CharInSet(Line[Low(String)], StopChars) then
+      begin
+        if etoDeleteStopChar in Options then
+          System.Delete(Line, Low(String), 1);
+        Exit;
+      end;
+
+      Result := Result + Line[Low(String)];
+      System.Delete(Line, Low(String), 1);
+    end;
+    if etoLocalLine in Options then
+      Exit;
+    Line := ReadLine;
+  until EndOfStream;
+end;
+
 
 end.
