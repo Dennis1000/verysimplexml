@@ -1,10 +1,10 @@
-﻿{ VerySimpleXML v1.5 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v1.7 BETA - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2009-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
   1.0 Initial release
   1.1 Removed "extended" quotation marks support, Renamed to XmlVerySimple
-  1.2 Switched to TStreamReader
+  1.2 Switched TStringList.Load to TStreamReader
   1.3 LoadFromFile/Stream now checks if header is UTF8
   1.4 Removed ' from node attributes
   1.5 Replaced string access with High/Low(string) for NextGen compiler compatibility
@@ -21,6 +21,11 @@
         Node.ChildNodes.First), Node.LastChild (same as Node.ChildNodes.Last), Node.NextSibling, Node.PreviousSibling
 
   1.6 Added comment nodes (see NodeType property)
+  1.7 Switched TStringList.Save to TStreamWriter
+      Renamed 'Indent' to 'NodeIndentStr' (TXmlDocument compatible)
+
+      Added TXmlDocument compatible functions:
+        StandAlone (same as Header.Attributes['standalone'])
 
   (c) Copyrights 2011-2014 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
@@ -52,7 +57,7 @@ type
   TXmlNodeArray = TArray<TXmlNode>;
 
   TxmlOptions = set of (doNodeAutoIndent, doCompact);
-  TXmlNodeType = (ntText, ntComment);
+  TXmlNodeType = (ntElement, ntComment);
 
   TExtractTextOptions = set of (etoDeleteStopChar, etoLocalLine);
   TXmlStreamReader = class(TStreamReader)
@@ -151,19 +156,21 @@ type
   TXmlVerySimple = class(TObject)
   private
     procedure Parse(Reader: TXmlStreamReader);
-    procedure Walk(Lines: TStringList; const Prefix: String; Node: TXmlNode);
+    procedure Walk(Writer: TStreamWriter; const Prefix: String; Node: TXmlNode);
     procedure SetText(const Value: String);
     function GetText: String;
     procedure SetEncoding(const Value: String);
     function GetEncoding: String;
     procedure SetVersion(const Value: String);
     function GetVersion: String;
-    procedure Compose(Lines: TStringList);
+    procedure Compose(Writer: TStreamWriter);
+    procedure SetStandAlone(const Value: String);
+    function GetStandAlone: String;
   protected
   public
     Root: TXmlNode; // There is only one Root Node
     Header: TXmlNode; // XML declarations are stored in here as Attributes
-    Ident: String; // Set Ident:='' if you want a compact output
+    NodeIndentStr: String;
     Options: TXmlOptions;
     constructor Create; virtual;
     destructor Destroy; override;
@@ -178,6 +185,7 @@ type
     property Text: String read GetText write SetText;
     property Encoding: String read GetEncoding write SetEncoding;
     property Version: String read GetVersion write SetVersion;
+    property StandAlone: String read GetStandAlone write SetStandAlone;
     property DocumentElement: TXmlNode read Root;
   end;
 
@@ -207,7 +215,7 @@ begin
   inherited;
   Root := TXmlNode.Create;
   Header := TXmlNode.Create;
-  Ident := '  ';
+  NodeIndentStr := '  ';
   Header.Name := '?xml'; // Default XML Header
   Version := '1.0'; // Default XML Version
   Options := [doNodeAutoIndent];
@@ -235,16 +243,21 @@ begin
   Result := Header.Attributes['encoding'];
 end;
 
-procedure TXmlVerySimple.Compose(Lines: TStringList);
+function TXmlVerySimple.GetStandAlone: String;
+begin
+  Result := Header.Attributes['standalone'];
+end;
+
+procedure TXmlVerySimple.Compose(Writer: TStreamWriter);
 begin
   if doCompact in Options then
-    Lines.LineBreak := '';
+    Writer.NewLine := '';
 
   // Create XML introduction
-  Walk(Lines, '', Header);
+  Walk(Writer, '', Header);
 
   // Create nodes representation
-  Walk(Lines, '', Root);
+  Walk(Writer, '', Root);
 end;
 
 function TXmlVerySimple.GetText: String;
@@ -253,7 +266,7 @@ var
 begin
   Lines := TStringList.Create;
   try
-    Compose(Lines);
+//    Compose(Lines);
     Result := Lines.Text;
   finally
     Lines.Free;
@@ -286,7 +299,7 @@ begin
   if AnsiSameText(Self.Encoding, 'utf-8') then
     Reader := TXmlStreamReader.Create(Stream, TEncoding.UTF8)
   else
-    Reader := TXmlStreamReader.Create(Stream, True);
+    Reader := TXmlStreamReader.Create(Stream, TEncoding.Default);
   try
     Parse(Reader);
   finally
@@ -448,8 +461,7 @@ begin
         if (Length(Line) > 0) and (Line[Low(String)] = '<') then
         begin
           IsText := False;
-          while (Length(Text) > 0) and (Text[Low(String)] = ' ') do
-            Delete(Text, Low(String), 1);
+          Text := TrimLeft(Text);
           Node.Text := UnEscape(Text);
         end;
       end;
@@ -469,25 +481,27 @@ end;
 
 procedure TXmlVerySimple.SaveToStream(const Stream: TStream);
 var
-  Encoding: TEncoding;
-  Lines: TStringList;
+  Writer: TStreamWriter;
 begin
-  Lines := TStringList.Create;
+  if AnsiSameText(Self.Encoding, 'utf-8') then
+    Writer := TStreamWriter.Create(Stream, TEncoding.UTF8)
+  else
+    Writer := TStreamWriter.Create(Stream, TEncoding.Default);
   try
-    Compose(Lines);
-    if AnsiSameText(Self.Encoding, 'utf-8') then
-      Encoding := TEncoding.UTF8
-    else
-      Encoding := TEncoding.Default;
-    Lines.SaveToStream(Stream, Encoding);
+    Compose(Writer);
   finally
-    Lines.Free;
+    Writer.Free;
   end;
 end;
 
 procedure TXmlVerySimple.SetEncoding(const Value: String);
 begin
   Header.Attributes['encoding'] := Value;
+end;
+
+procedure TXmlVerySimple.SetStandAlone(const Value: String);
+begin
+  Header.Attributes['standalone'] := Value;
 end;
 
 procedure TXmlVerySimple.SetText(const Value: String);
@@ -515,7 +529,7 @@ begin
   Result := ReplaceStr(Result, '&amp;', '&');
 end;
 
-procedure TXmlVerySimple.Walk(Lines: TStringList; const Prefix: String; Node: TXmlNode);
+procedure TXmlVerySimple.Walk(Writer: TStreamWriter; const Prefix: String; Node: TXmlNode);
 var
   Child: TXmlNode;
   Attribute: TXmlAttribute;
@@ -525,7 +539,7 @@ begin
   S := Prefix + '<';
   if Node.NodeType = ntComment then
   begin
-    Lines.Add(S + '!--' + Node.Text + '-->');
+    Writer.WriteLine(S + '!--' + Node.Text + '-->');
     Exit;
   end;
 
@@ -539,7 +553,7 @@ begin
   // Self closing tags
   if (Node.Text = '') and (not Node.HasChildNodes) and (Node <> Header) then
    begin
-    Lines.Add(S + ' />');
+    Writer.WriteLine(S + ' />');
     Exit;
   end;
 
@@ -550,19 +564,19 @@ begin
   if (not Node.HasChildNodes) and (Node.Text <> '') and (Node <> Header) then
   begin
     S := S + '</' + Node.Name + '>';
-    Lines.Add(S);
+    Writer.WriteLine(S);
   end
   else
   begin
-    Lines.Add(S);
+    Writer.WriteLine(S);
     if (doNodeAutoIndent in Options) and (not (doCompact in Options)) and (Node <> Header) then
-      TempIdent := Ident
+      TempIdent := NodeIndentStr
     else
       TempIdent := '';
     for Child in Node.ChildNodes do
-      Walk(Lines, Prefix + TempIdent, Child);
+      Walk(Writer, Prefix + TempIdent, Child);
     if Node <> Header then
-      Lines.Add(Prefix + '</' + Node.Name + '>');
+      Writer.WriteLine(Prefix + '</' + Node.Name + '>');
   end;
 end;
 
@@ -592,7 +606,7 @@ begin
   ChildNodes := TXmlNodeList.Create;
   ChildNodes.Node := Self;
   AttributeList := TXmlAttributeList.Create;
-  NodeType := ntText;
+  NodeType := ntElement;
 end;
 
 destructor TXmlNode.Destroy;
@@ -897,14 +911,13 @@ begin
           System.Delete(Line, Low(String), 1);
         Exit;
       end;
-
       Result := Result + Line[Low(String)];
       System.Delete(Line, Low(String), 1);
     end;
-    if etoLocalLine in Options then
+    if (etoLocalLine in Options) or (EndOfStream) then
       Exit;
     Line := ReadLine;
-  until EndOfStream;
+  until False;
 end;
 
 
