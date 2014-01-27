@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v1.7 BETA - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v1.9 BETA - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2009-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -523,6 +523,7 @@ begin
           if Node = Header then
           begin
             IsText := False;
+            Header.Name := '?xml';
             Node := Parent; // following nodes are not header child nodes
           end
           else
