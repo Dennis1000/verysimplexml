@@ -234,7 +234,7 @@ uses
 
 const
 {$IF CompilerVersion >= 24} // Delphi XE3 and up can use Low() and High()
-  LowStr = Low(String); // Get string index base, may be 0 (NextGen compiler) or 1
+  LowStr = Low(String); // Get string index base, may be 0 (NextGen compiler) or 1 (standard compiler)
 {$ELSE} // For any previous Delphi version overwrite High() function and use 1 as string index base
   LowStr = 1;  // Use 1 as string index base
 
@@ -571,8 +571,11 @@ var
   Stream: TFileStream;
 begin
   Stream := TFileStream.Create(FileName, fmCreate);
-  SaveToStream(Stream);
-  Stream.Free;
+  try
+    SaveToStream(Stream);
+  finally
+    Stream.Free;
+  end;
 end;
 
 procedure TXmlVerySimple.SaveToStream(const Stream: TStream);
