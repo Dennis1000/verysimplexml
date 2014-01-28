@@ -34,6 +34,13 @@
       Replaced String operations with character pointers (results in slightly faster loading)
   1.9 Added ntProcessingInstr nodes
       Added quote support for attributes to allow quotes inside attributes (e.g. attrib1='Franky "Gunshot" Gimley')
+      Only '<' and '&' are now automatically escaped/unescaped inside node text content
+      Added ntText nodes
+      Parsing routines modularized
+      Tries to detect BOM if no encoding is specified before loading
+      Uses ANSI encoding if an encoding is set before loading but it's not 'utf-8'
+      A text node is only created if the text consists of anything other than whitespaces/tab/returns
+      Added High(String) function for D9-XE2
 
   (c) Copyrights 2011-2014 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
@@ -59,15 +66,17 @@ interface
 uses
   Classes, SysUtils, Generics.Defaults, Generics.Collections;
 
+const
+  TXmlSpaces = [#$20, #$0A, #$0D, #9];
+
 type
-  TXmlNodeList = class;
   TXmlNode = class;
+  TXmlNodeType = (ntElement, ntComment, ntDocType, ntDocument, ntXmlDecl, ntProcessingInstr, ntText);
+  TXmlNodeList = class;
   TXmlNodeArray = TArray<TXmlNode>;
-
-  TxmlOptions = set of (doNodeAutoIndent, doCompact);
-  TXmlNodeType = (ntElement, ntComment, ntDocType, ntDocument, ntXmlDecl, ntProcessingInstr);
-
+  TXmlOptions = set of (doNodeAutoIndent, doCompact);
   TExtractTextOptions = set of (etoDeleteStopChar, etoStopString);
+
   TXmlStreamReader = class(TStreamReader)
   public
     LineBreak: String;
@@ -87,8 +96,6 @@ type
     Value: String; // Attribute value (always as String)
     Quote: Char; // Quote used during reading, default "
     constructor Create; virtual;
-    function Escape(const Value: String): String; virtual; // Convert special chars into escaped chars
-    function UnEscape(const Value: String): String; virtual;  // Convert escaped chars back into chars
   end;
 
   TXmlAttributeList = class(TObjectList<TXmlAttribute>)
@@ -176,7 +183,14 @@ type
   TXmlVerySimple = class(TObject)
   private
     Root: TXmlNode;
+    FHeader: TXmlNode;
+    FDocumentElement: TXmlNode;
     procedure Parse(Reader: TXmlStreamReader);
+    procedure ParseComment(Reader: TXmlStreamReader; var Parent: TXmlNode);
+    procedure ParseDocType(Reader: TXmlStreamReader; var Parent: TXmlNode);
+    procedure ParseProcessingInstr(Reader: TXmlStreamReader; var Parent: TXmlNode);
+    procedure ParseText(const Line: String; Parent: TXmlNode);
+    function ParseTag(Reader: TXmlStreamReader; ParseText: Boolean; var Parent: TXmlNode): TXmlNode;
     procedure Walk(Writer: TStreamWriter; const Prefix: String; Node: TXmlNode);
     procedure SetText(const Value: String);
     function GetText: String;
@@ -192,10 +206,8 @@ type
     function ExtractText(var Line: String; StopChars: String; Options: TExtractTextOptions): String;
   protected
   public
-    Header: TXmlNode; // XML declarations are stored in here as Attributes
-    DocumentElement: TXmlNode; // There is only one Root Node
     NodeIndentStr: String;
-    LineBreak: String;
+    LineBreak: String;  // Default: sLineBreak (OS dependent)
     Options: TXmlOptions;
     constructor Create; virtual;
     destructor Destroy; override;
@@ -205,14 +217,14 @@ type
     procedure LoadFromStream(const Stream: TStream); virtual; // Load XML for a stream
     procedure SaveToStream(const Stream: TStream); virtual; // Encoding is specified in Header-Node
     procedure SaveToFile(const FileName: String); virtual;
-    class function Escape(const Value: String): String; virtual; // Convert special chars into escaped chars
-    class function UnEscape(const Value: String): String; virtual;  // Convert escaped chars back into chars
-    property Text: String read GetText write SetText;
+    property Header: TXmlNode read FHeader; // XML declarations are stored in here as Attributes
+    property DocumentElement: TXmlNode read FDocumentElement; // There is only one Root Node
+    property ChildNodes: TXmlNodeList read GetChildNodes;
     property Encoding: String read GetEncoding write SetEncoding;
     property Version: String read GetVersion write SetVersion;
     property StandAlone: String read GetStandAlone write SetStandAlone;
-    property ChildNodes: TXmlNodeList read GetChildNodes;
     property Xml: String read GetText write SetText;
+    property Text: String read GetText write SetText;
   end;
 
 implementation
@@ -220,13 +232,25 @@ implementation
 uses
   StrUtils;
 
+const
+{$IF CompilerVersion >= 24} // Delphi XE3 and up can use Low() and High()
+  LowStr = Low(String); // Get string index base, may be 0 (NextGen compiler) or 1
+{$ELSE} // For any previous Delphi version overwrite High() function and use 1 as string index base
+  LowStr = 1;  // Use 1 as string index base
+
+function High(const Value: String): Integer; inline;
+begin
+  Result := Length(Value);
+end;
+{$ENDIF}
+
 { TVerySimpleXml }
 
 function TXmlVerySimple.AddChild(const Name: String): TXmlNode;
 begin
   Result := TXmlNode.Create;
-  if not assigned(DocumentElement) then
-    DocumentElement := Result;
+  if not assigned(FDocumentElement) then
+    FDocumentElement := Result;
 
   Result.Name := Name;
   Root.ChildNodes.Add(Result);
@@ -235,8 +259,8 @@ end;
 procedure TXmlVerySimple.Clear;
 begin
   Root.Clear;
-  DocumentElement := NIL;
-  Header := NIL;
+  FDocumentElement := NIL;
+  FHeader := NIL;
 end;
 
 
@@ -252,14 +276,14 @@ end;
 
 procedure TXmlVerySimple.CreateHeaderNode;
 begin
-  if assigned(Header) then
+  if assigned(FHeader) then
     Exit;
-  Header := TXmlNode.Create;
-  Header.Name := '?xml';
-  Header.Attributes['version'] := '1.0';  // Default XML version
-  Header.Attributes['encoding'] := 'utf-8';
-  Header.NodeType := ntXmlDecl;
-  Root.ChildNodes.Insert(0, Header);
+  FHeader := TXmlNode.Create;
+  FHeader.Name := '?xml';
+  FHeader.Attributes['version'] := '1.0';  // Default XML version
+  FHeader.Attributes['encoding'] := 'utf-8';
+  FHeader.NodeType := ntXmlDecl;
+  Root.ChildNodes.Insert(0, FHeader);
 end;
 
 destructor TXmlVerySimple.Destroy;
@@ -268,7 +292,6 @@ begin
   inherited;
 end;
 
-
 function TXmlVerySimple.GetChildNodes: TXmlNodeList;
 begin
   Result := Root.ChildNodes;
@@ -276,18 +299,39 @@ end;
 
 function TXmlVerySimple.GetEncoding: String;
 begin
-  if assigned(Header) then
-    Result := Header.Attributes['encoding']
+  if assigned(FHeader) then
+    Result := FHeader.Attributes['encoding']
   else
     Result := '';
 end;
 
 function TXmlVerySimple.GetStandAlone: String;
 begin
-  if assigned(Header) then
-    Result := Header.Attributes['standalone']
+  if assigned(FHeader) then
+    Result := FHeader.Attributes['standalone']
   else
     Result := '';
+end;
+
+function TXmlVerySimple.GetVersion: String;
+begin
+  if assigned(FHeader) then
+    Result := FHeader.Attributes['version']
+  else
+    Result := '';
+end;
+
+function TXmlVerySimple.GetText: String;
+var
+  Stream: TStringStream;
+begin
+  Stream := TStringStream.Create;
+  try
+    SaveToStream(Stream);
+    Result := Stream.DataString;
+  finally
+    Stream.Free;
+  end;
 end;
 
 procedure TXmlVerySimple.Compose(Writer: TStreamWriter);
@@ -303,33 +347,11 @@ begin
     Walk(Writer, '', Child);
 end;
 
-function TXmlVerySimple.GetText: String;
-var
-  Lines: TStringList;
-begin
-  Lines := TStringList.Create;
-  try
-//    Compose(Lines);
-    Result := Lines.Text;
-  finally
-    Lines.Free;
-  end;
-end;
-
-
-function TXmlVerySimple.GetVersion: String;
-begin
-  if assigned(Header) then
-    Result := Header.Attributes['version']
-  else
-    Result := '';
-end;
-
 procedure TXmlVerySimple.LoadFromFile(const FileName: String);
 var
   Stream: TFileStream;
 begin
-  Stream := TFileStream.Create(FileName, fmOpenRead);
+  Stream := TFileStream.Create(FileName, fmOpenRead + fmShareDenyWrite);
   try
     LoadFromStream(Stream);
   finally
@@ -341,12 +363,14 @@ procedure TXmlVerySimple.LoadFromStream(const Stream: TStream);
 var
   Reader: TXmlStreamReader;
 begin
-  if AnsiSameText(Self.Encoding, 'utf-8') then
+  if Encoding = '' then // none specified then use UTF8 with DetectBom
+    Reader := TXmlStreamReader.Create(Stream, True)
+  else
+  if AnsiSameText(Encoding, 'utf-8') then
     Reader := TXmlStreamReader.Create(Stream, TEncoding.UTF8)
   else
-    Reader := TXmlStreamReader.Create(Stream, TEncoding.Default);
+    Reader := TXmlStreamReader.Create(Stream, TEncoding.ANSI);
   try
-    Clear;
     Reader.LineBreak := LineBreak;
     Parse(Reader);
   finally
@@ -356,198 +380,189 @@ end;
 
 procedure TXmlVerySimple.Parse(Reader: TXmlStreamReader);
 var
-  IsTag, IsText, IsComment, IsHeader: Boolean;
-  Tag, Text: String;
   Parent, Node: TXmlNode;
-  Attribute: TXmlAttribute;
-  ALine, Attr, AttrText: String;
-  P: Integer;
-  IsSelfClosing: Boolean;
-  Quote: Char;
+  FistChar: Char;
+  ALine: String;
 begin
   Clear;
-  IsTag := False;
-  IsText := False;
-  IsComment := False;
-  IsHeader := False;
-  Node := Root;
+  Parent := Root;
 
   while not Reader.EndOfStream do
   begin
     Reader.ReadLine;
     while not Reader.EndOfLine do
     begin
-      if (not IsTag) and (not IsText) and (not IsComment) then
-      begin
-        Reader.ExtractText('<', [etoDeleteStopChar]);
-        if not Reader.EndOfLine then
-        begin
-          // check for a comment node
-          if Reader.IsUppercaseText('!--') then
-          begin
-            if assigned(Node) then  // ignore comments before XML declaration
-            begin
-              Parent := Node;
-              Node := TXmlNode.Create;
-              Node.NodeType := ntComment;
-              Parent.ChildNodes.Add(Node);
-              IsComment := True;
-            end;
-          end
-          else
-          // check for a doctype node
-          if Reader.IsUppercaseText('!DOCTYPE') then
-          begin
-            Parent := Node;
-            Node := TXmlNode.Create;
-            Node.NodeType := ntDocType;
-            Parent.ChildNodes.Add(Node);
-            Node.Text := Reader.ExtractText('>[', []);
-            if not Reader.EndOfLine then
-            begin
-              Quote := Reader.Line[Reader.LinePos];
-              Reader.IncLinePos;
-              if Quote = '[' then
-                Node.Text := Node.Text + Quote + Reader.ExtractText(']',[etoDeleteStopChar]) + ']' +
-                  Reader.ExtractText('>', [etoDeleteStopChar]);
-            end;
-            Node := Parent;
-          end
-          else
-          if Reader.Line[Reader.LinePos]='?' then
-            if Reader.IsUppercaseText('?XML') then
-            begin
-              IsHeader := True;
-              IsTag := True;
-            end
-            else
-            begin
-              Parent := Node;
-              Node := TXmlNode.Create;
-              Node.NodeType := ntProcessingInstr;
-              Parent.ChildNodes.Add(Node);
-              Reader.IncLinePos;
-              Node.Text := Reader.ExtractText('?>', [etoDeleteStopChar, etoStopString]);
-              Node := Parent;
-            end
-          else
-            IsTag := True;
-        end;
-      end;
+      ALine := Reader.ExtractText('<', [etoDeleteStopChar]);
+      if ALine <> '' then  // Check for text nodes
+        ParseText(Aline, Parent);
 
-      if IsComment then
-      begin
-        P := Pos('-->', Reader.Line, Reader.LinePos);
-        if P >= Reader.LinePos then
+      FistChar := Reader.Line[Reader.LinePos];
+      if FistChar = '!' then
+        if Reader.IsUppercaseText('!--') then  // check for a comment node
+          ParseComment(Reader, Parent)
+        else
+        if Reader.IsUppercaseText('!DOCTYPE') then // check for a doctype node
+          ParseDocType(Reader, Parent)
+        else
+          ParseTag(Reader, False, Parent) // try to parse as tag
+      else // Check for XML header / processing instructions
+      if FistChar = '?' then // could be header or processing instruction
+        if Reader.IsUppercaseText('?XML') then
         begin
-          Node.Text := Node.Text + Copy(Reader.Line, Reader.LinePos, (P - Reader.LinePos));
-          Reader.IncLinePos(P - Reader.LinePos + 3);
-          IsComment := False;
-          Node := Node.Parent;
+          FHeader := ParseTag(Reader, False, Parent);
+          Parent := FHeader.Parent;
+          FHeader.NodeType := ntXmlDecl;
+          FHeader.Name := '?xml';
+          if (FHeader.AttributeList.Count > 0) and (FHeader.AttributeList.Last.Name='?') then
+            FHeader.AttributeList.Delete(FHeader.AttributeList.Count - 1);
         end
         else
-        begin
-          if Node.Text <> '' then
-            Node.Text := Node.Text + LineBreak;
-          Node.Text := Node.Text + Copy(Reader.Line, Reader.LinePos);
-        end;
+          ParseProcessingInstr(Reader, Parent)// it is a processing instruction
+      else
+      begin // Parse a tag, the first tag in a document is the DocumentElement
+        Node := ParseTag(Reader, True, Parent);
+        if (not assigned(FDocumentElement)) and (Parent = Root) then
+          FDocumentElement := Node;
       end;
-
-      if IsTag then
-      begin
-        Tag := Reader.ExtractText('>', [etoDeleteStopChar]);
-        IsTag := False;
-
-        if (Length(Tag) > 0) and (Tag[Low(Tag)] = '/') then
-          Node := Node.Parent
-        else
-        begin
-          Parent := Node;
-          IsText := True;
-          Node := TXmlNode.Create;
-
-          // check for xml header
-          if IsHeader then
-          begin
-            Header := Node;
-            Header.NodeType := ntXmlDecl;
-            IsHeader := False;
-          end;
-
-          // Self-Closing Tag
-          if (Length(Tag) > 0) and (Tag[High(Tag)] = '/') then // Length(Tag)
-          begin
-            IsSelfClosing := True;
-            Delete(Tag, High(Tag), 1); // Length(Tag)
-          end
-          else
-            IsSelfClosing := False;
-
-          P := Pos(' ', Tag);
-          if P >= Low(String) then // Tag name has attributes
-          begin
-            ALine := Tag;
-            Delete(Tag, P, Length(Tag));
-            Delete(ALine, Low(String), P);
-
-            while Length(ALine) > 0 do
-            begin
-              Attr := TrimLeft(ExtractText(ALine, '=', [etoDeleteStopChar])); // Get Attribute Name
-
-              while (Attr <> '') and (Attr[High(Attr)]=' ') do  // if a space before equal sign then delete it
-                Delete(Attr, High(Attr), 1);
-
-              // Header node (Attr='?') does not support Attributes
-              if (not((Node = Header) and (Attr = '?')) and (Attr<>''))  then
-              begin
-                Attribute := TXmlAttribute.Create;
-                Attribute.Name := Attr;
-                ExtractText(ALine, '''' + '"', []);
-                ALine := TrimLeft(ALine);
-                if ALine <> '' then
-                begin
-                  Attribute.Quote := ALine[Low(String)];
-                  Delete(ALine, Low(String), 1);
-                  AttrText := ExtractText(ALine, Attribute.Quote, [etoDeleteStopChar]); // Get Attribute Value
-                  Attribute.Value := Attribute.UnEscape(AttrText);
-                end;
-                Node.AttributeList.Add(Attribute);
-              end;
-            end;
-          end;
-
-          Node.Name := Tag;
-          if assigned(Parent) then
-            Parent.ChildNodes.Add(Node);
-
-          if Node = Header then
-          begin
-            IsText := False;
-            Header.Name := '?xml';
-            Node := Parent; // following nodes are not header child nodes
-          end
-          else
-          if Parent = Root then
-            DocumentElement := Node;
-
-          Text := '';
-          if IsSelfClosing then
-            Node := Node.Parent;
-        end;
-      end;
-
-      if IsText then
-      begin
-        Text := Text + Reader.ExtractText('<', []);
-        if (not Reader.EndOfLine) and (Reader.Line[Reader.LinePos] = '<') then
-        begin
-          IsText := False;
-          Text := TrimLeft(Text);
-          Node.Text := UnEscape(Text);
-        end;
-      end;
-
     end;
+  end;
+end;
+
+procedure TXmlVerySimple.ParseText(const Line: String; Parent: TXmlNode);
+var
+  SingleChar: Char;
+  Node: TXmlNode;
+begin
+  for SingleChar in Line do
+    if not CharInSet(SingleChar, TXmlSpaces) then
+    begin
+      Node := TXmlNode.Create;
+      Node.NodeType := ntText;
+      Node.Text := Line;
+      Parent.ChildNodes.Add(Node);
+      Exit;
+    end;
+end;
+
+procedure TXmlVerySimple.ParseComment(Reader: TXmlStreamReader; var Parent: TXmlNode);
+var
+  Node: TXmlNode;
+begin
+  Node := TXmlNode.Create;
+  Node.NodeType := ntComment;
+  Parent.ChildNodes.Add(Node);
+  Node.Text := Reader.ExtractText('-->', [etoDeleteStopChar, etoStopString]);
+end;
+
+procedure TXmlVerySimple.ParseDocType(Reader: TXmlStreamReader; var Parent: TXmlNode);
+var
+  Node: TXmlNode;
+  Quote: Char;
+begin
+  Node := TXmlNode.Create;
+  Node.NodeType := ntDocType;
+  Parent.ChildNodes.Add(Node);
+  Node.Text := Reader.ExtractText('>[', []);
+  if not Reader.EndOfLine then
+  begin
+    Quote := Reader.Line[Reader.LinePos];
+    Reader.IncLinePos;
+    if Quote = '[' then
+      Node.Text := Node.Text + Quote + Reader.ExtractText(']',[etoDeleteStopChar]) + ']' +
+        Reader.ExtractText('>', [etoDeleteStopChar]);
+  end;
+end;
+
+procedure TXmlVerySimple.ParseProcessingInstr(Reader: TXmlStreamReader; var Parent: TXmlNode);
+var
+  Node: TXmlNode;
+begin
+  Node := TXmlNode.Create;
+  Node.NodeType := ntProcessingInstr;
+  Parent.ChildNodes.Add(Node);
+  Reader.IncLinePos;
+  Node.Text := Reader.ExtractText('?>', [etoDeleteStopChar, etoStopString]);
+end;
+
+function TXmlVerySimple.ParseTag(Reader: TXmlStreamReader; ParseText: Boolean; var Parent: TXmlNode): TXmlNode;
+var
+  Tag: String;
+  Node: TXmlNode;
+  Attribute: TXmlAttribute;
+  ALine, Attr, AttrText: String;
+  CharPos: Integer;
+  Text: String;
+  SingleChar: Char;
+begin
+  Tag := Reader.ExtractText('>', [etoDeleteStopChar]);
+
+  // A closing tag does not have any attributes nor text
+  if (Tag <> '') and (Tag[LowStr] = '/') then
+  begin
+    Result := Parent;
+    Parent := Parent.Parent;
+    Exit;
+  end;
+
+  // Creat a new new ntElement node
+  Node := TXmlNode.Create;
+  Parent.ChildNodes.Add(Node);
+  Result := Node;
+
+  // Check for a self-closing Tag (does not have any text)
+  if (Tag <> '') and (Tag[High(Tag)] = '/') then
+  begin
+    ParseText := False;
+    Delete(Tag, High(Tag), 1);
+  end
+  else
+    Parent := Node;
+
+  CharPos := Pos(' ', Tag);
+  if CharPos >= LowStr then // Tag name has attributes
+  begin
+    ALine := Tag;
+    Delete(Tag, CharPos, Length(Tag));
+    Delete(ALine, LowStr, CharPos);
+
+    while ALine <> '' do
+    begin
+      Attr := TrimLeft(ExtractText(ALine, '=', [etoDeleteStopChar])); // Get Attribute Name
+
+      while (Attr <> '') and (Attr[High(Attr)]=' ') do  // if a space before equal sign then delete it
+        Delete(Attr, High(Attr), 1);
+
+      Attribute := TXmlAttribute.Create;
+      Attribute.Name := Attr;
+      ExtractText(ALine, '''' + '"', []);
+      ALine := TrimLeft(ALine);
+      if ALine <> '' then
+      begin
+        Attribute.Quote := ALine[LowStr];
+        Delete(ALine, LowStr, 1);
+        AttrText := ExtractText(ALine, Attribute.Quote, [etoDeleteStopChar]); // Get Attribute Value
+        if Attribute.Quote = '"' then
+          Attribute.Value := ReplaceStr(AttrText, '&quot;', '"')
+        else
+          Attribute.Value := ReplaceStr(AttrText, '&apos;', '''');
+      end;
+      Node.AttributeList.Add(Attribute);
+    end;
+  end;
+
+  Node.Name := Tag;
+
+  if ParseText then
+  begin
+    Text := Reader.ExtractText('<', []);
+    Text := ReplaceStr(Text, '&amp;', '&');
+    Text := ReplaceStr(Text, '&lt;', '<');
+    for SingleChar in Text do
+      if not CharInSet(SingleChar, TXmlSpaces) then
+      begin
+        Node.Text := Text;
+        Break;
+      end;
   end;
 end;
 
@@ -567,7 +582,7 @@ begin
   if AnsiSameText(Self.Encoding, 'utf-8') then
     Writer := TStreamWriter.Create(Stream, TEncoding.UTF8)
   else
-    Writer := TStreamWriter.Create(Stream, TEncoding.Default);
+    Writer := TStreamWriter.Create(Stream, TEncoding.ANSI);
   try
     Compose(Writer);
   finally
@@ -578,13 +593,19 @@ end;
 procedure TXmlVerySimple.SetEncoding(const Value: String);
 begin
   CreateHeaderNode;
-  Header.Attributes['encoding'] := Value;
+  FHeader.Attributes['encoding'] := Value;
 end;
 
 procedure TXmlVerySimple.SetStandAlone(const Value: String);
 begin
   CreateHeaderNode;
-  Header.Attributes['standalone'] := Value;
+  FHeader.Attributes['standalone'] := Value;
+end;
+
+procedure TXmlVerySimple.SetVersion(const Value: String);
+begin
+  CreateHeaderNode;
+  FHeader.Attributes['version'] := Value;
 end;
 
 procedure TXmlVerySimple.SetText(const Value: String);
@@ -598,38 +619,11 @@ begin
   Stream.Free;
 end;
 
-procedure TXmlVerySimple.SetVersion(const Value: String);
-begin
-  CreateHeaderNode;
-  Header.Attributes['version'] := Value;
-end;
-
-
-class function TXmlVerySimple.Escape(const Value: String): String;
-begin
-  Result := ReplaceStr(Value, '&', '&amp;');
-  Result := ReplaceStr(Result, '<', '&lt;');
-  Result := ReplaceStr(Result, '>', '&gt;');
-  Result := ReplaceStr(Result, '''', '&apos;');
-  Result := ReplaceStr(Result, '"', '&quot;');
-end;
-
-
-
-class function TXmlVerySimple.UnEscape(const Value: String): String;
-begin
-  Result := ReplaceStr(Value, '&lt;', '<');
-  Result := ReplaceStr(Result, '&gt;', '>');
-  Result := ReplaceStr(Result, '&quot;', '"');
-  Result := ReplaceStr(Result, '&apos;', '''');
-  Result := ReplaceStr(Result, '&amp;', '&');
-end;
-
 procedure TXmlVerySimple.Walk(Writer: TStreamWriter; const Prefix: String; Node: TXmlNode);
 var
   Child: TXmlNode;
   Attribute: TXmlAttribute;
-  S: String;
+  S, Text: String;
   TempIdent: String;
 begin
   S := Prefix + '<';
@@ -649,15 +643,24 @@ begin
         Writer.WriteLine(S + '?' + Node.Text + '?>');
         Exit;
       end;
-//    ntXmlDecl:
-
+    ntText:
+      begin
+        Writer.Write(Node.Text);
+        Exit;
+      end;
   end;
 
   S := S + Node.Name;
   for Attribute in Node.AttributeList do
-    S := S + ' ' + Attribute.Name + '=' + Attribute.Quote + Attribute.Escape(Attribute.Value) + Attribute.Quote;
+  begin
+    S := S + ' ' + Attribute.Name + '=' + Attribute.Quote;
+    if Attribute.Quote = '"' then
+      S := S + ReplaceStr(Attribute.Value, '"', '&quot;') + Attribute.Quote
+    else
+      S := S + ReplaceStr(Attribute.Value, '''', '&apos;') + Attribute.Quote;
+  end;
 
-  if Node = Header then // the Header node doesn't have any child nodes
+  if Node = FHeader then // the Header node doesn't have any child nodes
   begin
     Writer.WriteLine(S + '?>');
     Exit;
@@ -672,9 +675,13 @@ begin
 
   S := S + '>';
   if Node.Text <> '' then
-    S := S + Escape(Node.Text);
+  begin
+    Text := ReplaceStr(Node.Text, '&', '&amp;');
+    Text := ReplaceStr(Text, '<', '&lt;');
+    S := S + Text;
+  end;
 
-  if (not Node.HasChildNodes) and (Node.Text <> '') and ((Node.Parent <> Root) or (Node = DocumentElement)) then
+  if (not Node.HasChildNodes) and (Node.Text <> '') and ((Node.Parent <> Root) or (Node = FDocumentElement)) then
   begin
     S := S + '</' + Node.Name + '>';
     Writer.WriteLine(S);
@@ -704,16 +711,16 @@ begin
   for TestChar in StopChars do
   begin
     CharPos := Pos(TestChar, Line);
-    if (CharPos >= Low(String)) and ((FoundPos = -1) or (CharPos < FoundPos)) then
+    if (CharPos >= LowStr) and ((FoundPos = -1) or (CharPos < FoundPos)) then
       FoundPos := CharPos;
   end;
 
   if FoundPos <> -1 then
   begin
-    Result := Copy(Line, Low(String), FoundPos - Low(String));
+    Result := Copy(Line, LowStr, FoundPos - LowStr);
     if etoDeleteStopChar in Options then
       Inc(FoundPos);
-    Delete(Line, Low(String), FoundPos - Low(String));
+    Delete(Line, LowStr, FoundPos - LowStr);
   end
   else
   begin
@@ -784,7 +791,6 @@ function TXmlNode.FirstChild: TXmlNode;
 begin
   Result := ChildNodes.First;
 end;
-
 
 function TXmlNode.GetNodes(const Name: String): TXmlNodeList;
 begin
@@ -876,7 +882,6 @@ begin
   Text := Value;
   Result := Self;
 end;
-
 
 { TXmlAttributeList }
 
@@ -1040,8 +1045,6 @@ end;
 
 { TXmlStreamReader }
 
-
-
 procedure TXmlStreamReader.IncLinePos(Value: Integer);
 begin
   Inc(LinePos, Value);
@@ -1067,18 +1070,18 @@ begin
   repeat
     if not EndOfLine then
     begin
-      FoundPos := Low(String)-1;
+      FoundPos := LowStr - 1;
       if etoStopString in Options then
         FoundPos := Pos(StopChars, Line, LinePos)
       else
         for StopChar in StopChars do
         begin
           CharPos := Pos(StopChar, Line, LinePos);
-          if (CharPos >= Low(String)) and ((FoundPos = Low(String)-1) or (CharPos < FoundPos)) then
+          if (CharPos >= LowStr) and ((FoundPos = LowStr-1) or (CharPos < FoundPos)) then
             FoundPos := CharPos;
         end;
 
-      if FoundPos <> Low(String)-1 then
+      if FoundPos <> LowStr-1 then
       begin
         IncPos := FoundPos-LinePos;
         Result := Result + Copy(Line, LinePos, IncPos);
@@ -1105,7 +1108,7 @@ function TXmlStreamReader.ReadLine: String;
 begin
   Result := inherited;
   Line := Result;
-  LinePos := Low(String);
+  LinePos := LowStr;
   LineLength := High(Line);
   IncLinePos(0);
 end;
@@ -1114,23 +1117,7 @@ end;
 
 constructor TXmlAttribute.Create;
 begin
-  Quote := '"';
-end;
-
-function TXmlAttribute.Escape(const Value: String): String;
-begin
-  if Quote = '"' then
-    Result := ReplaceStr(Value, '"', '&quot;')
-  else
-    Result := ReplaceStr(Value, '''', '&apos;');
-end;
-
-function TXmlAttribute.UnEscape(const Value: String): String;
-begin
-  if Quote = '"' then
-    Result := ReplaceStr(Value, '&quot;', '"')
-  else
-    Result := ReplaceStr(Value, '&apos;', '''');
+  Quote := '"';  // Default attribute quotating mark
 end;
 
 end.
