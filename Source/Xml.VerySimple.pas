@@ -616,10 +616,13 @@ var
   Stream: TStringStream;
 begin
   Stream := TStringStream.Create;
-  Stream.WriteString(Value);
-  Stream.Position := 0;
-  LoadFromStream(Stream);
-  Stream.Free;
+  try
+    Stream.WriteString(Value);
+    Stream.Position := 0;
+    LoadFromStream(Stream);
+  finally
+    Stream.Free;
+  end;
 end;
 
 procedure TXmlVerySimple.Walk(Writer: TStreamWriter; const Prefix: String; Node: TXmlNode);
