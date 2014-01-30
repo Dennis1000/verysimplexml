@@ -43,11 +43,10 @@
       Added High(String) function for D2010-XE2
       Replaced XMLArray with TXmlNodeList
   2.0 BETA Dropped support for D2009 (because of missing .last, .first, etc. - see wiki for more information)
-      Added TEncoding.ANSI for D2010 (redirects to TEncoding.Default, which is with XE2+ OS depended)
+      Added TEncoding.ANSI for D2010 (redirects to TEncoding.Default, which is with XE2 and above OS dependend!)
       What's left to do:
         - tests with all Delphi versions
         - small XML Test suite
-        - exception handling
         - update example for FMX/VCL
         - upgrade/update code comments and wiki
 
@@ -138,9 +137,6 @@ type
     // Return a list of childodes with given Name
     function FindNodes(const Name: String): TXmlNodeList; virtual;
 
-    // Return a list of childodes with given Name
-    function GetNodes(const Name: String): TXmlNodeList; virtual;
-
     // Returns True if the Attribute exits
     function HasAttribute(const AttrName: String): Boolean; virtual;
     // Returns True if this child nodes exists
@@ -176,9 +172,6 @@ type
     function Find(const Name, AttrName, AttrValue: String): TXmlNode; overload;
     // Return a list of childodes with given Name
     function FindNodes(const Name: String): TXmlNodeList; virtual;
-
-    // Return a list of childodes with given Name
-    function GetNodes(const Name: String): TXmlNodeList; virtual;
 
     function HasNode(Name: String): Boolean; virtual;
     function Insert(const Name: String; Position: Integer): TXmlNode; overload;
@@ -281,7 +274,12 @@ begin
     FDocumentElement := Result;
 
   Result.Name := Name;
-  Root.ChildNodes.Add(Result);
+  try
+    Root.ChildNodes.Add(Result);
+  except
+    Result.Free;
+    raise;
+  end;
 end;
 
 procedure TXmlVerySimple.Clear;
@@ -311,7 +309,12 @@ begin
   FHeader.Attributes['version'] := '1.0';  // Default XML version
   FHeader.Attributes['encoding'] := 'utf-8';
   FHeader.NodeType := ntXmlDecl;
-  Root.ChildNodes.Insert(0, FHeader);
+  try
+    Root.ChildNodes.Insert(0, FHeader);
+  except
+    FHeader.Free;
+    raise;
+  end;
 end;
 
 destructor TXmlVerySimple.Destroy;
@@ -467,7 +470,12 @@ begin
       Node := TXmlNode.Create;
       Node.NodeType := ntText;
       Node.Text := Line;
-      Parent.ChildNodes.Add(Node);
+      try
+        Parent.ChildNodes.Add(Node);
+      except
+        Node.Free;
+        raise;
+      end;
       Exit;
     end;
 end;
@@ -478,7 +486,12 @@ var
 begin
   Node := TXmlNode.Create;
   Node.NodeType := ntComment;
-  Parent.ChildNodes.Add(Node);
+  try
+    Parent.ChildNodes.Add(Node);
+  except
+    Node.Free;
+    raise;
+  end;
   Node.Text := Reader.ExtractText('-->', [etoDeleteStopChar, etoStopString]);
 end;
 
@@ -489,7 +502,12 @@ var
 begin
   Node := TXmlNode.Create;
   Node.NodeType := ntDocType;
-  Parent.ChildNodes.Add(Node);
+  try
+    Parent.ChildNodes.Add(Node);
+  except
+    Node.Free;
+    raise;
+  end;
   Node.Text := Reader.ExtractText('>[', []);
   if not Reader.EndOfLine then
   begin
@@ -507,7 +525,12 @@ var
 begin
   Node := TXmlNode.Create;
   Node.NodeType := ntProcessingInstr;
-  Parent.ChildNodes.Add(Node);
+  try
+    Parent.ChildNodes.Add(Node);
+  except
+    Node.Free;
+    raise;
+  end;
   Reader.IncLinePos;
   Node.Text := Reader.ExtractText('?>', [etoDeleteStopChar, etoStopString]);
 end;
@@ -534,7 +557,12 @@ begin
 
   // Creat a new new ntElement node
   Node := TXmlNode.Create;
-  Parent.ChildNodes.Add(Node);
+  try
+    Parent.ChildNodes.Add(Node);
+  except
+    Node.Free;
+    raise;
+  end;
   Result := Node;
 
   // Check for a self-closing Tag (does not have any text)
@@ -574,7 +602,12 @@ begin
         else
           Attribute.Value := ReplaceStr(AttrText, '&apos;', '''');
       end;
-      Node.AttributeList.Add(Attribute);
+      try
+        Node.AttributeList.Add(Attribute);
+      except
+        Attribute.Free;
+        raise;
+      end;
     end;
   end;
 
@@ -826,11 +859,6 @@ begin
   Result := ChildNodes.First;
 end;
 
-function TXmlNode.GetNodes(const Name: String): TXmlNodeList;
-begin
-  Result := ChildNodes.GetNodes(Name);
-end;
-
 function TXmlNode.GetAttr(const AttrName: String): String;
 var
   Attribute: TXmlAttribute;
@@ -898,7 +926,12 @@ begin
   if not assigned(Attribute) then // If attribute is not found, create one
   begin
     Attribute := TXmlAttribute.Create;
-    AttributeList.Add(Attribute);
+    try
+      AttributeList.Add(Attribute);
+    except
+      Attribute.Free;
+      raise;
+    end;
   end;
   Attribute.Name := AttrName; // this allows rewriting of the attribute name
   Attribute.Value := AttrValue;
@@ -1005,9 +1038,14 @@ var
   Node: TXmlNode;
 begin
   Result := TXmlNodeList.Create(False);
-  for Node in Self do
-    if AnsiSameText(Node.Name, Name) then
-      Result.Add(Node);
+  try
+    for Node in Self do
+      if AnsiSameText(Node.Name, Name) then
+        Result.Add(Node);
+  except
+    Result.Free;
+    raise;
+  end;
 end;
 
 function TXmlNodeList.FirstChild: TXmlNode;
@@ -1015,20 +1053,6 @@ begin
   Result := First;
 end;
 
-function TXmlNodeList.GetNodes(const Name: String): TXmlNodeList;
-var
-  Node: TXmlNode;
-begin
-  Result := TXmlNodeList.Create(False);
-  try
-  for Node in Self do
-    if AnsiSameText(Node.Name, Name) then
-      Result.Add(Node);
-  except
-    Result.Free;
-    raise;
-  end;
-end;
 
 function TXmlNodeList.HasNode(Name: String): Boolean;
 begin

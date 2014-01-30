@@ -102,10 +102,10 @@ begin
     .SetText('flombies');
 
   // Add new keyword attribute (lang=en) to every book
-  AllNodes := Xml.DocumentElement.GetNodes('book');
+  AllNodes := Xml.DocumentElement.FindNodes('book');
   for BookNode in AllNodes do
   begin
-    Nodes := BookNode.Find('keywords').GetNodes('keyword');
+    Nodes := BookNode.Find('keywords').FindNodes('keyword');
     for Node in Nodes do
       if not Node.HasAttribute('lang') then
         Node.Attributes['lang'] := 'en';
