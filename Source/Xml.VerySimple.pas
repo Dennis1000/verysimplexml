@@ -242,7 +242,15 @@ function High(const Value: String): Integer; inline;
 begin
   Result := Length(Value);
 end;
-{$ENDIF}
+{$IFEND}
+
+{$IF CompilerVersion < 22}  //Delphi XE added PosEx as an overload function)
+function Pos(const SubStr, S: string; Offset: Integer): Integer; overload; Inline;
+begin
+  Result := PosEx(SubStr, S, Offset);
+end;
+{$IFEND}
+
 
 { TVerySimpleXml }
 
