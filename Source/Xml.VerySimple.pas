@@ -1,5 +1,5 @@
-﻿{ VerySimpleXML v1.9 BETA - a lightweight, one-unit, cross-platform XML reader/writer
-  for Delphi 2009-XE5 by Dennis Spreen
+﻿{ VerySimpleXML v2.0 BETA 1 - a lightweight, one-unit, cross-platform XML reader/writer
+  for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
   1.0 Initial release
@@ -40,8 +40,16 @@
       Tries to detect BOM if no encoding is specified before loading
       Uses ANSI encoding if an encoding is set before loading but it's not 'utf-8'
       A text node is only created if the text consists of anything other than whitespaces/tab/returns
-      Added High(String) function for D9-XE2
+      Added High(String) function for D2010-XE2
       Replaced XMLArray with TXmlNodeList
+  2.0 BETA Dropped support for D2009 (because of missing .last, .first, etc. - see wiki for more information)
+      Added TEncoding.ANSI for D2010 (redirects to TEncoding.Default, which is with XE2+ OS depended)
+      What's left to do:
+        - tests with all Delphi versions
+        - small XML Test suite
+        - exception handling
+        - update example for FMX/VCL
+        - upgrade/update code comments and wiki
 
   (c) Copyrights 2011-2014 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
@@ -248,6 +256,18 @@ end;
 function Pos(const SubStr, S: string; Offset: Integer): Integer; overload; Inline;
 begin
   Result := PosEx(SubStr, S, Offset);
+end;
+
+type
+  TEncodingHelper = class helper for TEncoding
+    class function GetANSI: TEncoding; static;
+  public
+    class property ANSI: TEncoding read GetANSI;
+  end;
+
+class function TEncodingHelper.GetANSI: TEncoding;
+begin
+  Result := TEncoding.Default;
 end;
 {$IFEND}
 
