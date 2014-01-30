@@ -41,6 +41,7 @@
       Uses ANSI encoding if an encoding is set before loading but it's not 'utf-8'
       A text node is only created if the text consists of anything other than whitespaces/tab/returns
       Added High(String) function for D9-XE2
+      Replaced XMLArray with TXmlNodeList
 
   (c) Copyrights 2011-2014 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
@@ -73,7 +74,6 @@ type
   TXmlNode = class;
   TXmlNodeType = (ntElement, ntComment, ntDocType, ntDocument, ntXmlDecl, ntProcessingInstr, ntText);
   TXmlNodeList = class;
-  TXmlNodeArray = TArray<TXmlNode>;
   TXmlOptions = set of (doNodeAutoIndent, doCompact);
   TExtractTextOptions = set of (etoDeleteStopChar, etoStopString);
 
@@ -128,7 +128,7 @@ type
     // Find a childnode by Name/Attribute/Value
     function Find(const Name, AttrName, AttrValue: String): TXmlNode; overload;
     // Return a list of childodes with given Name
-    function FindNodes(const Name: String): TXmlNodeArray; virtual;
+    function FindNodes(const Name: String): TXmlNodeList; virtual;
 
     // Return a list of childodes with given Name
     function GetNodes(const Name: String): TXmlNodeList; virtual;
@@ -167,7 +167,7 @@ type
     // Find a node by Name/Attribute/Value
     function Find(const Name, AttrName, AttrValue: String): TXmlNode; overload;
     // Return a list of childodes with given Name
-    function FindNodes(const Name: String): TXmlNodeArray; virtual;
+    function FindNodes(const Name: String): TXmlNodeList; virtual;
 
     // Return a list of childodes with given Name
     function GetNodes(const Name: String): TXmlNodeList; virtual;
@@ -796,7 +796,7 @@ begin
   Result := ChildNodes.Find(Name, AttrName);
 end;
 
-function TXmlNode.FindNodes(const Name: String): TXmlNodeArray;
+function TXmlNode.FindNodes(const Name: String): TXmlNodeList;
 begin
   Result := ChildNodes.FindNodes(Name);
 end;
@@ -980,17 +980,14 @@ begin
   Result := Find(Name);
 end;
 
-function TXmlNodeList.FindNodes(const Name: String): TXmlNodeArray;
+function TXmlNodeList.FindNodes(const Name: String): TXmlNodeList;
 var
   Node: TXmlNode;
 begin
-  SetLength(Result, 0);
+  Result := TXmlNodeList.Create(False);
   for Node in Self do
     if AnsiSameText(Node.Name, Name) then
-    begin
-      SetLength(Result, Length(Result) + 1);
-      Result[High(Result)] := Node;
-    end;
+      Result.Add(Node);
 end;
 
 function TXmlNodeList.FirstChild: TXmlNode;
