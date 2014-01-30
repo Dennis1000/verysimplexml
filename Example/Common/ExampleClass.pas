@@ -86,14 +86,15 @@ class procedure TExampleClass.Modify(Xml: TXmlVerySimple);
 var
   Node, BookNode: TXmlNode;
   Nodes, AllNodes: TXmlNodeList;
-  NodesArray: TXmlNodeArray;
+  NodeList: TXmlNodeList;
 begin
   // Add a <keywords> section to every book if not exists
   // Use a NodeArray with FindNodes
-  NodesArray := Xml.DocumentElement.FindNodes('book');
-  for Node in NodesArray do
+  NodeList := Xml.DocumentElement.FindNodes('book');
+  for Node in NodeList do
     if not assigned(Node.Find('keywords')) then
       Node.AddChild('keywords');
+  NodeList.Free;
 
   // Add a new keyword to a certain book (id=bk102)
   Xml.DocumentElement.Find('book', 'id', 'bk102').Find('keywords').AddChild('keyword').SetText('no-muerto')
