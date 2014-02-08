@@ -45,6 +45,7 @@
   2.0 BETA Dropped support for D2009 (because of missing .last, .first, etc. - see wiki for more information)
       Added TEncoding.ANSI for D2010 (redirects to TEncoding.Default, which is with XE2 and above OS dependend!)
       Added CDATA node type
+      Addes IsTextElement
       What's left to do:
         - tests with all Delphi versions
         - rewrite text node output
@@ -183,6 +184,8 @@ type
     function PreviousSibling: TXmlNode; overload; virtual;
     ///	<summary> Returns True if the node has at least one child node </summary>
     function HasChildNodes: Boolean; virtual;
+    ///	<summary> Returns True if the node has a text content and no child nodes </summary>
+    function IsTextElement: Boolean; virtual;
     ///	<summary> Fluent interface for setting the node type </summary>
     function SetNodeType(Value: TXmlNodeType): TXmlNode; virtual;
     ///	<summary> Attributes of a node, accessible by attribute name (case insensitive) </summary>
@@ -219,6 +222,8 @@ type
     function NextSibling(Node: TXmlNode): TXmlNode; virtual;
     ///	<summary> Returns previous sibling node </summary>
     function PreviousSibling(Node: TXmlNode): TXmlNode; virtual;
+    ///	<summary> Returns the node at the given position </summary>
+    function Get(Index: Integer): TXmlNode; virtual;
   end;
 
   TXmlVerySimple = class(TObject)
@@ -1033,6 +1038,11 @@ begin
     Result.Parent := Self;
 end;
 
+function TXmlNode.IsTextElement: Boolean;
+begin
+  Result := (Text <> '') and (not HasChildNodes);
+end;
+
 function TXmlNode.LastChild: TXmlNode;
 begin
   Result := ChildNodes.Last;
@@ -1204,6 +1214,11 @@ begin
   Result := First;
 end;
 
+
+function TXmlNodeList.Get(Index: Integer): TXmlNode;
+begin
+  Result := Items[Index];
+end;
 
 function TXmlNodeList.HasNode(Name: String): Boolean;
 begin
