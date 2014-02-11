@@ -378,6 +378,7 @@ begin
   NodeIndentStr := '  ';
   Options := [doNodeAutoIndent];
   LineBreak := sLineBreak;
+  CreateHeaderNode;
 end;
 
 procedure TXmlVerySimple.CreateHeaderNode;
@@ -913,7 +914,7 @@ begin
       Indent := NextIndent;
     end;
 
-    if (not Node.HasChildNodes) or (Node.LastChild.NodeType <> ntText) then
+    if (Node.HasChildNodes) or ((Node.LastChild <> NIL) and (Node.LastChild.NodeType <> ntText)) then
       Indent := LineBreak + PrefixNode
     else
       Indent := '';
@@ -1054,7 +1055,10 @@ end;
 
 function TXmlNode.LastChild: TXmlNode;
 begin
-  Result := ChildNodes.Last;
+  if ChildNodes.Count > 0 then
+    Result := ChildNodes.Last
+  else
+    Result := NIL;
 end;
 
 function TXmlNode.NextSibling: TXmlNode;
