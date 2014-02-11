@@ -90,15 +90,24 @@ type
 
   TXmlStreamReader = class(TStreamReader)
   public
-    LineBreak: String;
-    LinePos: Integer;
-    LineLength: Integer;
+    ///	<summary> Current character position of the line</summary>
+    CharPos: Integer;
+    ///	<summary> Returns True if no more characters in current line available </summary>
     EndOfLine: Boolean;
+    ///	<summary> Current line </summary>
     Line: String;
+    ///	<summary> Line break handling during reading </summary>
+    LineBreak: String;
+    ///	<summary> Current line length </summary>
+    LineLength: Integer;
+    ///	<summary> Extract text until chars found in StopChars </summary>
     function ExtractText(StopChars: String; Options: TExtractTextOptions): String; virtual;
+    ///	<summary> Read next line </summary>
     function ReadLine: String; override;
+    ///	<summary> Returns True if the first uppercased characters at the current position match Value </summary>
     function IsUppercaseText(Value: String): Boolean; virtual;
-    procedure IncLinePos(Value: Integer = 1); virtual;
+    ///	<summary> Proceed with the next character(s) (value optional, default 1) </summary>
+    procedure IncCharPos(Value: Integer = 1); virtual;
   end;
 
   TXmlAttribute = class(TObject)
@@ -148,7 +157,7 @@ type
     ///	<summary> Text value of the node </summary>
     Text: String;
 
-    ///	<summary> Creates a new XML node </summary>
+    /// <summary> Creates a new XML node </summary>
     constructor Create(ANodeType: TXmlNodeType = ntElement); virtual;
     ///	<summary> Removes the node from its parent and frees all of its childs </summary>
     destructor Destroy; override;
@@ -503,7 +512,7 @@ begin
       if ALine <> '' then  // Check for text nodes
         ParseText(Aline, Parent);
 
-      FistChar := Reader.Line[Reader.LinePos];
+      FistChar := Reader.Line[Reader.CharPos];
       if FistChar = '!' then
         if Reader.IsUppercaseText('!--') then  // check for a comment node
           ParseComment(Reader, Parent)
@@ -657,8 +666,8 @@ begin
   Node.Text := Reader.ExtractText('>[', []);
   if not Reader.EndOfLine then
   begin
-    Quote := Reader.Line[Reader.LinePos];
-    Reader.IncLinePos;
+    Quote := Reader.Line[Reader.CharPos];
+    Reader.IncCharPos;
     if Quote = '[' then
       Node.Text := Node.Text + Quote + Reader.ExtractText(']',[etoDeleteStopChar]) + ']' +
         Reader.ExtractText('>', [etoDeleteStopChar]);
@@ -676,7 +685,7 @@ begin
     Node.Free;
     raise;
   end;
-  Reader.IncLinePos;
+  Reader.IncCharPos;
   Node.Text := Reader.ExtractText('?>', [etoDeleteStopChar, etoStopString]);
 end;
 
@@ -853,7 +862,7 @@ begin
       end;
   end;
 
-  S := S + Node.Name + ' ' + Node.AttributeList.AsString;
+  S := S + Node.Name + Node.AttributeList.AsString;
 
   if Node = FHeader then // the Header node doesn't have any child nodes
   begin
@@ -1110,7 +1119,6 @@ begin
   Result := '';
   for Attribute in Self do
     Result := Result + ' ' + Attribute.AsString;
-  System.Delete(Result, LowStr, 1);
 end;
 
 procedure TXmlAttributeList.Delete(const Name: String);
@@ -1267,24 +1275,24 @@ end;
 
 { TXmlStreamReader }
 
-procedure TXmlStreamReader.IncLinePos(Value: Integer);
+procedure TXmlStreamReader.IncCharPos(Value: Integer);
 begin
-  Inc(LinePos, Value);
-  EndOfLine := (LinePos > LineLength);
+  Inc(CharPos, Value);
+  EndOfLine := (CharPos > LineLength);
 end;
 
 function TXmlStreamReader.IsUppercaseText(Value: String): Boolean;
 begin
-  Result := (Uppercase(copy(Line, LinePos, Length(Value))) = Value);
+  Result := (Uppercase(copy(Line, CharPos, Length(Value))) = Value);
   if Result then
-    IncLinePos(Length(Value));
+    IncCharPos(Length(Value));
 end;
 
 
 function TXmlStreamReader.ExtractText(StopChars: String;
   Options: TExtractTextOptions): String;
 var
-  CharPos, FoundPos: Integer;
+  TempCharPos, FoundPos: Integer;
   StopChar: Char;
   IncPos: Integer;
 begin
@@ -1294,29 +1302,29 @@ begin
     begin
       FoundPos := LowStr - 1;
       if etoStopString in Options then
-        FoundPos := Pos(StopChars, Line, LinePos)
+        FoundPos := Pos(StopChars, Line, CharPos)
       else
         for StopChar in StopChars do
         begin
-          CharPos := Pos(StopChar, Line, LinePos);
-          if (CharPos >= LowStr) and ((FoundPos = LowStr-1) or (CharPos < FoundPos)) then
-            FoundPos := CharPos;
+          TempCharPos := Pos(StopChar, Line, CharPos);
+          if (TempCharPos >= LowStr) and ((FoundPos = LowStr-1) or (TempCharPos < FoundPos)) then
+            FoundPos := TempCharPos;
         end;
 
       if FoundPos <> LowStr-1 then
       begin
-        IncPos := FoundPos-LinePos;
-        Result := Result + Copy(Line, LinePos, IncPos);
+        IncPos := FoundPos-CharPos;
+        Result := Result + Copy(Line, CharPos, IncPos);
         if etoDeleteStopChar in Options then
           if etoStopString in Options then
             Inc(IncPos, Length(StopChars))
           else
            Inc(IncPos);
-        IncLinePos(IncPos);
+        IncCharPos(IncPos);
         Exit;
       end;
 
-      Result := Result + Copy(Line, LinePos);
+      Result := Result + Copy(Line, CharPos);
     end;
 
     if EndOfStream then
@@ -1330,9 +1338,9 @@ function TXmlStreamReader.ReadLine: String;
 begin
   Result := inherited;
   Line := Result;
-  LinePos := LowStr;
+  CharPos := LowStr;
   LineLength := High(Line);
-  IncLinePos(0);
+  IncCharPos(0);
 end;
 
 { TXmlAttribute }
