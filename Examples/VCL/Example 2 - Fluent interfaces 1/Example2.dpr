@@ -1,7 +1,7 @@
 program Example2;
 
 uses
-  Vcl.Forms,
+  Forms,
   unit1 in 'unit1.pas' {Form1},
   Xml.VerySimple in '..\..\..\Source\Xml.VerySimple.pas';
 
