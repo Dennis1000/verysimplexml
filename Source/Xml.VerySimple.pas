@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 3 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 5 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -45,7 +45,8 @@
   2.0 BETA Dropped support for D2009 (because of missing .last, .first, etc. - see wiki for more information)
       Added TEncoding.ANSI for D2010 (redirects to TEncoding.Default, which is with XE2 and above OS dependend!)
       Added CDATA node type
-      Addes IsTextElement
+      Added IsTextElement
+      Expanded Find routines with NodeTypes
       What's left to do:
         - tests with all Delphi versions
         - rewrite text node output
@@ -83,6 +84,7 @@ const
 type
   TXmlNode = class;
   TXmlNodeType = (ntElement, ntText, ntCData, ntProcessingInstr, ntComment, ntDocument, ntDocType, ntXmlDecl);
+  TXmlNodeTypes = set of TXmlNodeType;
   TXmlNodeList = class;
   TXmlAttributeType = (atValue, atSingle);
   TXmlOptions = set of (doNodeAutoIndent, doCompact);
@@ -164,17 +166,17 @@ type
     ///	<summary> Clears the attributes, the text and all of its child nodes (but not the name) </summary>
     procedure Clear;
     ///	<summary> Find a child node by its name </summary>
-    function Find(const Name: String): TXmlNode; overload; virtual;
+    function Find(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode; overload; virtual;
     ///	<summary> Find a child node by name and attribute name </summary>
-    function Find(const Name, AttrName: String): TXmlNode; overload; virtual;
+    function Find(const Name, AttrName: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode; overload; virtual;
     ///	<summary> Find a child node by name, attribute name and attribute value </summary>
-    function Find(const Name, AttrName, AttrValue: String): TXmlNode; overload; virtual;
-    ///	<summary> Return a list of child nodes with the given name </summary>
-    function FindNodes(const Name: String): TXmlNodeList; virtual;
+    function Find(const Name, AttrName, AttrValue: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode; overload; virtual;
+    ///	<summary> Return a list of child nodes with the given name and (optional) node types </summary>
+    function FindNodes(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNodeList; virtual;
     ///	<summary> Returns True if the attribute exists </summary>
     function HasAttribute(const AttrName: String): Boolean; virtual;
     ///	<summary> Returns True if a child node with that name exits </summary>
-    function HasChild(const Name: String): Boolean; virtual;
+    function HasChild(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): Boolean; virtual;
     ///	<summary> Add a child node with an optional NodeType (default: ntElement)</summary>
     function AddChild(const AName: String; ANodeType: TXmlNodeType = ntElement): TXmlNode; virtual;
     ///	<summary> Insert a child node at a specific position with a (optional) NodeType (default: ntElement)</summary>
@@ -212,17 +214,17 @@ type
     ///	<summary> Adds a node and sets the parent of the node to the parent of the list </summary>
     function Add(Value: TXmlNode): Integer; overload; virtual;
     ///	<summary> Find a node by its name (case sensitive), returns NIL if no node is found </summary>
-    function Find(const Name: String): TXmlNode; overload; virtual;
+    function Find(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode; overload; virtual;
     ///	<summary> Same as Find(), returnsa a node by its name (case sensitive) </summary>
-    function FindNode(const Name: String): TXmlNode; virtual;
+    function FindNode(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode; virtual;
     ///	<summary> Find a node that has the the given attribute, returns NIL if no node is found </summary>
-    function Find(const Name, AttrName: String): TXmlNode; overload; virtual;
+    function Find(const Name, AttrName: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode; overload; virtual;
     ///	<summary> Find a node that as the given attribute name and value, returns NIL otherwise </summary>
-    function Find(const Name, AttrName, AttrValue: String): TXmlNode; overload; virtual;
-    ///	<summary> Returns a list of child nodes with the given name, the list doesn't own the nodes </summary>
-    function FindNodes(const Name: String): TXmlNodeList; virtual;
+    function Find(const Name, AttrName, AttrValue: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode; overload; virtual;
+    ///	<summary> Return a list of child nodes with the given name and (optional) node types </summary>
+    function FindNodes(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNodeList; virtual;
     ///	<summary> Returns True if the list contains a node with the given name </summary>
-    function HasNode(Name: String): Boolean; virtual;
+    function HasNode(Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): Boolean; virtual;
     ///	<summary> Inserts a node at the given position </summary>
     function Insert(const Name: String; Position: Integer; NodeType: TXmlNodeType = ntElement): TXmlNode; overload; virtual;
     ///	<summary> Returns the first child node, same as .First </summary>
@@ -990,24 +992,24 @@ begin
   inherited;
 end;
 
-function TXmlNode.Find(const Name: String): TXmlNode;
+function TXmlNode.Find(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode;
 begin
-  Result := ChildNodes.Find(Name);
+  Result := ChildNodes.Find(Name, NodeTypes);
 end;
 
-function TXmlNode.Find(const Name, AttrName, AttrValue: String): TXmlNode;
+function TXmlNode.Find(const Name, AttrName, AttrValue: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode;
 begin
-  Result := ChildNodes.Find(Name, AttrName, AttrValue);
+  Result := ChildNodes.Find(Name, AttrName, AttrValue, NodeTypes);
 end;
 
-function TXmlNode.Find(const Name, AttrName: String): TXmlNode;
+function TXmlNode.Find(const Name, AttrName: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode;
 begin
-  Result := ChildNodes.Find(Name, AttrName);
+  Result := ChildNodes.Find(Name, AttrName, NodeTypes);
 end;
 
-function TXmlNode.FindNodes(const Name: String): TXmlNodeList;
+function TXmlNode.FindNodes(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNodeList;
 begin
-  Result := ChildNodes.FindNodes(Name);
+  Result := ChildNodes.FindNodes(Name, NodeTypes);
 end;
 
 function TXmlNode.FirstChild: TXmlNode;
@@ -1031,9 +1033,9 @@ begin
   Result := AttributeList.HasAttribute(AttrName);
 end;
 
-function TXmlNode.HasChild(const Name: String): Boolean;
+function TXmlNode.HasChild(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): Boolean;
 begin
-  Result := ChildNodes.HasNode(Name);
+  Result := ChildNodes.HasNode(Name, NodeTypes);
 end;
 
 function TXmlNode.HasChildNodes: Boolean;
@@ -1154,13 +1156,13 @@ end;
 
 { TXmlNodeList }
 
-function TXmlNodeList.Find(const Name: String): TXmlNode;
+function TXmlNodeList.Find(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode;
 var
   Node: TXmlNode;
 begin
   Result := NIL;
   for Node in Self do
-    if AnsiSameText(Node.Name, Name) then
+    if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and (AnsiSameText(Node.Name, Name)) then
     begin
       Result := Node;
       Break;
@@ -1173,27 +1175,29 @@ begin
   Value.Parent := Parent;
 end;
 
-function TXmlNodeList.Find(const Name, AttrName, AttrValue: String): TXmlNode;
+function TXmlNodeList.Find(const Name, AttrName, AttrValue: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode;
 var
   Node: TXmlNode;
 begin
   Result := NIL;
   for Node in Self do
-    if (AnsiSameText(Node.Name, Name)) and (Node.HasAttribute(AttrName)) and
-      (AnsiSameStr(Node.Attributes[AttrName], AttrValue)) then
+    if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and
+     (AnsiSameText(Node.Name, Name)) and (Node.HasAttribute(AttrName)) and
+     (AnsiSameStr(Node.Attributes[AttrName], AttrValue)) then
     begin
       Result := Node;
       Break;
     end;
 end;
 
-function TXmlNodeList.Find(const Name, AttrName: String): TXmlNode;
+function TXmlNodeList.Find(const Name, AttrName: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode;
 var
   Node: TXmlNode;
 begin
   Result := NIL;
   for Node in Self do
-    if AnsiSameText(Node.Name, Name) and Node.HasAttribute(AttrName) then
+    if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and
+      (AnsiSameText(Node.Name, Name)) and (Node.HasAttribute(AttrName)) then
     begin
       Result := Node;
       Break;
@@ -1201,20 +1205,25 @@ begin
 end;
 
 
-function TXmlNodeList.FindNode(const Name: String): TXmlNode;
+function TXmlNodeList.FindNode(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode;
 begin
-  Result := Find(Name);
+  Result := Find(Name, NodeTypes);
 end;
 
-function TXmlNodeList.FindNodes(const Name: String): TXmlNodeList;
+function TXmlNodeList.FindNodes(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNodeList;
 var
   Node: TXmlNode;
 begin
   Result := TXmlNodeList.Create(False);
   try
     for Node in Self do
-      if AnsiSameText(Node.Name, Name) then
-        Result.Add(Node);
+      if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and
+        (AnsiSameText(Node.Name, Name)) then
+        begin
+          Result.Parent := Node.Parent;
+          Result.Add(Node);
+        end;
+    Result.Parent := NIL;
   except
     Result.Free;
     raise;
@@ -1232,9 +1241,9 @@ begin
   Result := Items[Index];
 end;
 
-function TXmlNodeList.HasNode(Name: String): Boolean;
+function TXmlNodeList.HasNode(Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): Boolean;
 begin
-  Result := Assigned(Find(Name));
+  Result := Assigned(Find(Name, NodeTypes));
 end;
 
 function TXmlNodeList.Insert(const Name: String; Position: Integer; NodeType: TXmlNodeType = ntElement): TXmlNode;
