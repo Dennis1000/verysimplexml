@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 2 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 3 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -956,7 +956,7 @@ end;
 
 function TXmlNode.AddChild(const AName: String; ANodeType: TXmlNodeType = ntElement): TXmlNode;
 begin
-  Result := TXmlNode.Create(NodeType);
+  Result := TXmlNode.Create(ANodeType);
   Result.Name := AName;
   try
     ChildNodes.Add(Result);
