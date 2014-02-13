@@ -1,0 +1,16 @@
+program Example9;
+
+uses
+  Forms,
+  unit1 in 'unit1.pas' {Form1},
+  Xml.VerySimple in '..\..\..\Source\Xml.VerySimple.pas',
+  Xml.VerySimple.Extended in 'Xml.VerySimple.Extended.pas';
+
+{$R *.res}
+
+begin
+  Application.Initialize;
+  Application.MainFormOnTaskbar := True;
+  Application.CreateForm(TForm1, Form1);
+  Application.Run;
+end.
