@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 7 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 8 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -130,6 +130,8 @@ type
 
   TXmlAttributeList = class(TObjectList<TXmlAttribute>)
   public
+    ///	<summary> Add a name only attribute </summary>
+    function Add(const Name: String): TXmlAttribute; overload; virtual;
     ///	<summary> Returns the attribute given by name (case insensitive), NIL if no attribute found </summary>
     function Find(const Name: String): TXmlAttribute; virtual;
     ///	<summary> Deletes an attribute given by name (case insensitive) </summary>
@@ -547,16 +549,7 @@ begin
     AttrName := ExtractText(Value, ' =', []);
     Value := TrimLeft(Value);
 
-    Attribute := TXmlAttribute.Create;
-    Attribute.Name := AttrName;
-    Attribute.AttributeType := atSingle;
-    try
-      AttributeList.Add(Attribute);
-    except
-      Attribute.Free;
-      raise;
-    end;
-
+    Attribute := AttributeList.Add(AttrName);
     if (Value = '') or (Value[LowStr]<>'=') then
       Continue;
 
@@ -827,7 +820,7 @@ begin
       end;
     ntProcessingInstr:
       begin
-        if doParseProcessingInstr in Options then
+        if (Node.Text = '') or (Node.AttributeList.Count > 0) then
           Writer.Write(S + '?' + Node.Name + Node.AttributeList.AsString + '?>')
         else
           Writer.Write(S + '?' + Node.Text + '?>');
@@ -1054,15 +1047,8 @@ var
 begin
   Attribute := AttributeList.Find(AttrName); // Search for given name
   if not assigned(Attribute) then // If attribute is not found, create one
-  begin
-    Attribute := TXmlAttribute.Create;
-    try
-      AttributeList.Add(Attribute);
-    except
-      Attribute.Free;
-      raise;
-    end;
-  end;
+    Attribute := AttributeList.Add(AttrName);
+  Attribute.AttributeType := atValue;
   Attribute.Name := AttrName; // this allows rewriting of the attribute name (lower/upper case)
   Attribute.Value := AttrValue;
   Result := Self;
@@ -1081,6 +1067,18 @@ begin
 end;
 
 { TXmlAttributeList }
+
+function TXmlAttributeList.Add(const Name: String): TXmlAttribute;
+begin
+  Result := TXmlAttribute.Create;
+  Result.Name := Name;
+  try
+    Add(Result);
+  except
+    Result.Free;
+    raise;
+  end;
+end;
 
 function TXmlAttributeList.AsString: String;
 var
@@ -1354,7 +1352,7 @@ end;
 
 constructor TXmlAttribute.Create;
 begin
-  AttributeType := atValue;
+  AttributeType := atSingle;
   Quote := '"';  // Default attribute quotating mark
 end;
 
