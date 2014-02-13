@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 6 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 7 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -87,7 +87,7 @@ type
   TXmlNodeTypes = set of TXmlNodeType;
   TXmlNodeList = class;
   TXmlAttributeType = (atValue, atSingle);
-  TXmlOptions = set of (doNodeAutoIndent, doCompact);
+  TXmlOptions = set of (doNodeAutoIndent, doCompact, doParseProcessingInstr);
   TExtractTextOptions = set of (etoDeleteStopChar, etoStopString);
 
   TXmlStreamReader = class(TStreamReader)
@@ -213,6 +213,8 @@ type
     Parent: TXmlNode;
     ///	<summary> Adds a node and sets the parent of the node to the parent of the list </summary>
     function Add(Value: TXmlNode): Integer; overload; virtual;
+    ///	<summary> Creates a new node of type NodeType (default ntElement) and adds it to the list </summary>
+    function Add(NodeType: TXmlNodeType = ntElement): TXmlNode; overload; virtual;
     ///	<summary> Find a node by its name (case sensitive), returns NIL if no node is found </summary>
     function Find(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode; overload; virtual;
     ///	<summary> Same as Find(), returnsa a node by its name (case sensitive) </summary>
@@ -249,7 +251,8 @@ type
     procedure ParseProcessingInstr(Reader: TXmlStreamReader; var Parent: TXmlNode); virtual;
     procedure ParseCData(Reader: TXmlStreamReader; var Parent: TXmlNode); virtual;
     procedure ParseText(const Line: String; Parent: TXmlNode); virtual;
-    function ParseTag(Reader: TXmlStreamReader; ParseText: Boolean; var Parent: TXmlNode): TXmlNode; virtual;
+    function ParseTag(Reader: TXmlStreamReader; ParseText: Boolean; var Parent: TXmlNode): TXmlNode; overload; virtual;
+    function ParseTag(Tag: String; var Parent: TXmlNode): TXmlNode; overload; virtual;
     procedure Walk(Writer: TStreamWriter; const PrefixNode: String; Node: TXmlNode); virtual;
     procedure SetText(const Value: String); virtual;
     function GetText: String; virtual;
@@ -387,16 +390,9 @@ procedure TXmlVerySimple.CreateHeaderNode;
 begin
   if assigned(FHeader) then
     Exit;
-  FHeader := TXmlNode.Create(ntXmlDecl);
-  FHeader.Name := '?xml';
+  FHeader := Root.ChildNodes.Insert('xml', 0, ntXmlDecl);
   FHeader.Attributes['version'] := '1.0';  // Default XML version
   FHeader.Attributes['encoding'] := 'utf-8';
-  try
-    Root.ChildNodes.Insert(0, FHeader);
-  except
-    FHeader.Free;
-    raise;
-  end;
 end;
 
 function TXmlVerySimple.CreateNode(const Name: String; NodeType: TXmlNodeType): TXmlNode;
@@ -529,17 +525,7 @@ begin
           ParseTag(Reader, False, Parent) // try to parse as tag
       else // Check for XML header / processing instructions
       if FistChar = '?' then // could be header or processing instruction
-        if Reader.IsUppercaseText('?XML') then
-        begin
-          FHeader := ParseTag(Reader, False, Parent);
-          Parent := FHeader.Parent;
-          FHeader.NodeType := ntXmlDecl;
-          FHeader.Name := '?xml';
-          if (FHeader.AttributeList.Count > 0) and (FHeader.AttributeList.Last.Name='?') then
-            FHeader.AttributeList.Delete(FHeader.AttributeList.Count - 1);
-        end
-        else
-          ParseProcessingInstr(Reader, Parent)// it is a processing instruction
+        ParseProcessingInstr(Reader, Parent)
       else
       begin // Parse a tag, the first tag in a document is the DocumentElement
         Node := ParseTag(Reader, True, Parent);
@@ -594,6 +580,7 @@ begin
   end;
 end;
 
+
 procedure TXmlVerySimple.ParseText(const Line: String; Parent: TXmlNode);
 var
   SingleChar: Char;
@@ -615,14 +602,8 @@ begin
 
   if TextNode then
   begin
-    Node := TXmlNode.Create(ntText);
+    Node := Parent.ChildNodes.Add(ntText);
     Node.Text := Line;
-    try
-      Parent.ChildNodes.Add(Node);
-    except
-      Node.Free;
-      raise;
-    end;
   end;
 end;
 
@@ -630,13 +611,7 @@ procedure TXmlVerySimple.ParseCData(Reader: TXmlStreamReader; var Parent: TXmlNo
 var
   Node: TXmlNode;
 begin
-  Node := TXmlNode.Create(ntCData);
-  try
-    Parent.ChildNodes.Add(Node);
-  except
-    Node.Free;
-    raise;
-  end;
+  Node := Parent.ChildNodes.Add(ntCData);
   Node.Text := Reader.ExtractText(']]>', [etoDeleteStopChar, etoStopString]);
 end;
 
@@ -644,13 +619,7 @@ procedure TXmlVerySimple.ParseComment(Reader: TXmlStreamReader; var Parent: TXml
 var
   Node: TXmlNode;
 begin
-  Node := TXmlNode.Create(ntComment);
-  try
-    Parent.ChildNodes.Add(Node);
-  except
-    Node.Free;
-    raise;
-  end;
+  Node := Parent.ChildNodes.Add(ntComment);
   Node.Text := Reader.ExtractText('-->', [etoDeleteStopChar, etoStopString]);
 end;
 
@@ -659,13 +628,7 @@ var
   Node: TXmlNode;
   Quote: Char;
 begin
-  Node := TXmlNode.Create(ntDocType);
-  try
-    Parent.ChildNodes.Add(Node);
-  except
-    Node.Free;
-    raise;
-  end;
+  Node := Parent.ChildNodes.Add(ntDocType);
   Node.Text := Reader.ExtractText('>[', []);
   if not Reader.EndOfLine then
   begin
@@ -680,28 +643,57 @@ end;
 procedure TXmlVerySimple.ParseProcessingInstr(Reader: TXmlStreamReader; var Parent: TXmlNode);
 var
   Node: TXmlNode;
+  Tag: String;
 begin
-  Node := TXmlNode.Create(ntProcessingInstr);
-  try
-    Parent.ChildNodes.Add(Node);
-  except
-    Node.Free;
-    raise;
+  Reader.IncCharPos; // omit the '?'
+  Tag := Reader.ExtractText('?>', [etoDeleteStopChar, etoStopString]);
+  Node := ParseTag(Tag, Parent);
+  if lowercase(Node.Name) = 'xml' then
+  begin
+    FHeader := Node;
+    FHeader.NodeType := ntXmlDecl;
+  end
+  else
+  begin
+    Node.NodeType := ntProcessingInstr;
+    if not (doParseProcessingInstr in Options) then
+      Node.Text := Tag;
   end;
-  Reader.IncCharPos;
-  Node.Text := Reader.ExtractText('?>', [etoDeleteStopChar, etoStopString]);
+  Parent := Node.Parent;
 end;
 
 function TXmlVerySimple.ParseTag(Reader: TXmlStreamReader; ParseText: Boolean; var Parent: TXmlNode): TXmlNode;
 var
   Tag: String;
-  Node: TXmlNode;
   ALine: String;
-  CharPos: Integer;
   SingleChar: Char;
 begin
   Tag := Reader.ExtractText('>', [etoDeleteStopChar]);
+  Result := ParseTag(Tag, Parent);
+  if Result = Parent then // only non-self closing nodes may have a text
+  begin
+    ALine := Reader.ExtractText('<', []);
+    ALine := ReplaceStr(ALine, '&amp;', '&');
+    ALine := ReplaceStr(ALine, '&lt;', '<');
 
+    if PreserveWhiteSpace then
+      Result.Text := ALine
+    else
+      for SingleChar in ALine do
+        if not CharInSet(SingleChar, TXmlSpaces) then
+        begin
+          Result.Text := ALine;
+          Break;
+        end;
+  end;
+end;
+
+function TXmlVerySimple.ParseTag(Tag: String; var Parent: TXmlNode): TXmlNode;
+var
+  Node: TXmlNode;
+  ALine: String;
+  CharPos: Integer;
+begin
   // A closing tag does not have any attributes nor text
   if (Tag <> '') and (Tag[LowStr] = '/') then
   begin
@@ -711,21 +703,12 @@ begin
   end;
 
   // Creat a new new ntElement node
-  Node := TXmlNode.Create;
-  try
-    Parent.ChildNodes.Add(Node);
-  except
-    Node.Free;
-    raise;
-  end;
+  Node := Parent.ChildNodes.Add;
   Result := Node;
 
   // Check for a self-closing Tag (does not have any text)
   if (Tag <> '') and (Tag[High(Tag)] = '/') then
-  begin
-    ParseText := False;
-    Delete(Tag, High(Tag), 1);
-  end
+    Delete(Tag, High(Tag), 1)
   else
     Parent := Node;
 
@@ -740,24 +723,8 @@ begin
   end;
 
   Node.Name := Tag;
-
-  if ParseText then
-  begin
-    ALine := Reader.ExtractText('<', []);
-    ALine := ReplaceStr(ALine, '&amp;', '&');
-    ALine := ReplaceStr(ALine, '&lt;', '<');
-
-    if PreserveWhiteSpace then
-      Node.Text := ALine
-    else
-      for SingleChar in ALine do
-        if not CharInSet(SingleChar, TXmlSpaces) then
-        begin
-          Node.Text := ALine;
-          Break;
-        end;
-  end;
 end;
+
 
 procedure TXmlVerySimple.SaveToFile(const FileName: String);
 var
@@ -848,11 +815,6 @@ begin
         Writer.Write(S + '!DOCTYPE ' + Node.Text + '>');
         Exit;
       end;
-    ntProcessingInstr:
-      begin
-        Writer.Write(S + '?' + Node.Text + '?>');
-        Exit;
-      end;
     ntCData:
       begin
         Writer.Write('<![CDATA[' + Node.Text + ']]>');
@@ -863,11 +825,19 @@ begin
         Writer.Write(Node.Text);
         Exit;
       end;
+    ntProcessingInstr:
+      begin
+        if doParseProcessingInstr in Options then
+          Writer.Write(S + '?' + Node.Name + Node.AttributeList.AsString + '?>')
+        else
+          Writer.Write(S + '?' + Node.Text + '?>');
+        Exit;
+      end;
   end;
 
   S := S + Node.Name + Node.AttributeList.AsString;
 
-  if Node = FHeader then // the Header node doesn't have any child nodes
+  if (Node.NodeType = ntXmlDecl) then // The Header node doesn't have any child nodes
   begin
     Writer.Write(S + '?>');
     Exit;
@@ -958,14 +928,8 @@ end;
 
 function TXmlNode.AddChild(const AName: String; ANodeType: TXmlNodeType = ntElement): TXmlNode;
 begin
-  Result := TXmlNode.Create(ANodeType);
+  Result := ChildNodes.Add(ANodeType);
   Result.Name := AName;
-  try
-    ChildNodes.Add(Result);
-  except
-    Result.Free;
-    raise;
-  end;
 end;
 
 procedure TXmlNode.Clear;
@@ -1173,6 +1137,17 @@ function TXmlNodeList.Add(Value: TXmlNode): Integer;
 begin
   Result := inherited Add(Value);
   Value.Parent := Parent;
+end;
+
+function TXmlNodeList.Add(NodeType: TXmlNodeType = ntElement): TXmlNode;
+begin
+  Result := TXmlNode.Create(NodeType);
+  try
+    Add(Result);
+  except
+    Result.Free;
+    raise;
+  end;
 end;
 
 function TXmlNodeList.Find(const Name, AttrName, AttrValue: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode;
