@@ -1291,7 +1291,7 @@ end;
 procedure TXmlStreamReader.IncCharPos(Value: Integer);
 begin
   Inc(CharPos, Value);
-  EndOfLine := (CharPos > LineLength);
+  EndOfLine := (CharPos > LineLength - LowStr);
 end;
 
 function TXmlStreamReader.IsUppercaseText(Value: String): Boolean;
