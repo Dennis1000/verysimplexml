@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 8 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 10 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -217,6 +217,8 @@ type
     function Add(Value: TXmlNode): Integer; overload; virtual;
     ///	<summary> Creates a new node of type NodeType (default ntElement) and adds it to the list </summary>
     function Add(NodeType: TXmlNodeType = ntElement): TXmlNode; overload; virtual;
+    ///	<summary> Add a child node with an optional NodeType (default: ntElement)</summary>
+    function Add(const Name: String; NodeType: TXmlNodeType = ntElement): TXmlNode; overload; virtual;
     ///	<summary> Find a node by its name (case sensitive), returns NIL if no node is found </summary>
     function Find(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode; overload; virtual;
     ///	<summary> Same as Find(), returnsa a node by its name (case sensitive) </summary>
@@ -553,14 +555,14 @@ begin
     if (Value = '') or (Value[LowStr]<>'=') then
       Continue;
 
-    Delete(Value, LowStr, 1);
+    Delete(Value, 1, 1);
     Attribute.AttributeType := atValue;
     ExtractText(Value, '''' + '"', []);
     Value := TrimLeft(Value);
     if Value <> '' then
     begin
       Attribute.Quote := Value[LowStr];
-      Delete(Value, LowStr, 1);
+      Delete(Value, 1, 1);
       AttrText := ExtractText(Value, Attribute.Quote, [etoDeleteStopChar]); // Get Attribute Value
       AttrText := ReplaceStr(AttrText, '&amp;', '&');
       AttrText := ReplaceStr(AttrText, '&lt;', '<');
@@ -650,7 +652,10 @@ begin
   begin
     Node.NodeType := ntProcessingInstr;
     if not (doParseProcessingInstr in Options) then
+    begin
       Node.Text := Tag;
+      Node.AttributeList.Clear;
+    end;
   end;
   Parent := Node.Parent;
 end;
@@ -701,16 +706,16 @@ begin
 
   // Check for a self-closing Tag (does not have any text)
   if (Tag <> '') and (Tag[High(Tag)] = '/') then
-    Delete(Tag, High(Tag), 1)
+    Delete(Tag, Length(Tag), 1)
   else
     Parent := Node;
 
   CharPos := Pos(' ', Tag);
-  if CharPos >= LowStr then // Tag may have attributes
+  if CharPos <> 0 then // Tag may have attributes
   begin
     ALine := Tag;
     Delete(Tag, CharPos, Length(Tag));
-    Delete(ALine, LowStr, CharPos);
+    Delete(ALine, 1, CharPos);
     if ALine <> '' then
       ParseAttributes(ALine, Node.AttributeList);
   end;
@@ -820,7 +825,7 @@ begin
       end;
     ntProcessingInstr:
       begin
-        if (Node.Text = '') or (Node.AttributeList.Count > 0) then
+        if Node.AttributeList.Count > 0 then
           Writer.Write(S + '?' + Node.Name + Node.AttributeList.AsString + '?>')
         else
           Writer.Write(S + '?' + Node.Text + '?>');
@@ -895,20 +900,21 @@ var
   CharPos, FoundPos: Integer;
   TestChar: Char;
 begin
-  FoundPos := -1;
+  FoundPos := 0;
   for TestChar in StopChars do
   begin
     CharPos := Pos(TestChar, Line);
-    if (CharPos >= LowStr) and ((FoundPos = -1) or (CharPos < FoundPos)) then
+    if (CharPos <> 0) and ((FoundPos = 0) or (CharPos < FoundPos)) then
       FoundPos := CharPos;
   end;
 
-  if FoundPos <> -1 then
+  if FoundPos <> 0 then
   begin
-    Result := Copy(Line, LowStr, FoundPos - LowStr);
+    Dec(FoundPos);
+    Result := Copy(Line, 1, FoundPos);
     if etoDeleteStopChar in Options then
       Inc(FoundPos);
-    Delete(Line, LowStr, FoundPos - LowStr);
+    Delete(Line, 1, FoundPos);
   end
   else
   begin
@@ -921,8 +927,7 @@ end;
 
 function TXmlNode.AddChild(const AName: String; ANodeType: TXmlNodeType = ntElement): TXmlNode;
 begin
-  Result := ChildNodes.Add(ANodeType);
-  Result.Name := AName;
+  Result := ChildNodes.Add(AName, ANodeType);
 end;
 
 procedure TXmlNode.Clear;
@@ -1148,6 +1153,12 @@ begin
   end;
 end;
 
+function TXmlNodeList.Add(const Name: String; NodeType: TXmlNodeType): TXmlNode;
+begin
+  Result := Add(NodeType);
+  Result.Name := Name;
+end;
+
 function TXmlNodeList.Find(const Name, AttrName, AttrValue: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNode;
 var
   Node: TXmlNode;
@@ -1286,21 +1297,22 @@ begin
   repeat
     if not EndOfLine then
     begin
-      FoundPos := LowStr - 1;
+      FoundPos := 0;
       if etoStopString in Options then
-        FoundPos := Pos(StopChars, Line, CharPos)
+        FoundPos := Pos(StopChars, Line, CharPos + (1 - LowStr))
       else
         for StopChar in StopChars do
         begin
-          TempCharPos := Pos(StopChar, Line, CharPos);
-          if (TempCharPos >= LowStr) and ((FoundPos = LowStr-1) or (TempCharPos < FoundPos)) then
+          TempCharPos := Pos(StopChar, Line, CharPos + (1 - LowStr));
+          if (TempCharPos <> 0) and ((FoundPos = 0) or (TempCharPos < FoundPos)) then
             FoundPos := TempCharPos;
         end;
 
-      if FoundPos <> LowStr-1 then
+      if FoundPos <> 0 then
       begin
-        IncPos := FoundPos-CharPos;
-        Result := Result + Copy(Line, CharPos, IncPos);
+        IncPos := FoundPos-(CharPos + (1 - LowStr));
+        if IncPos <> 0 then
+          Result := Result + Copy(Line, CharPos + (1 - LowStr), IncPos);
         if etoDeleteStopChar in Options then
           if etoStopString in Options then
             Inc(IncPos, Length(StopChars))
@@ -1310,7 +1322,7 @@ begin
         Exit;
       end;
 
-      Result := Result + Copy(Line, CharPos);
+      Result := Result + Copy(Line, CharPos + (1 - LowStr) );
     end;
 
     if EndOfStream then

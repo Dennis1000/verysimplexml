@@ -36,7 +36,7 @@ begin
 
   // Create a XML document first, and fill it
   Xml := TXmlVerySimple.Create;
-  Xml.Text := '<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet  type="text/css"  href="glossary.css" ?>'+
+  Xml.Text := '<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet   type="text/css"   href="glossary.css" ?>'+
     '<books><book id="bk101"><author>Gambardella, Matthew</author><title>XML Developer''s Guide</title></book>'+
     '</books>';
 
