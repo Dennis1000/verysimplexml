@@ -1,58 +1,6 @@
-﻿{ VerySimpleXML v2.0 BETA 10 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 11 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
-
-  1.0 Initial release
-  1.1 Removed "extended" quotation marks support, Renamed to XmlVerySimple
-  1.2 Switched TStringList.Load to TStreamReader
-  1.3 LoadFromFile/Stream now checks if header is UTF8
-  1.4 Removed ' from node attributes
-  1.5 Replaced string access with High/Low(string) for NextGen compiler compatibility
-      Compact the XML now by using Options := [doCompact]
-      XmlNode:
-        Attribute value is now escaped/unescaped
-        Attribute['tag'] is now Attributes['tag'] (TXmlDocument compatible), all attributes are found in AttributeList
-        Added Name (same as NodeName)
-        Moved 'find' procedures over to TXmlNodeList (added stubs accordingly)
-      Added TXmlDocument compatible functions:
-        NodeValue (same as Text), NodeName (same as Name), Encoding (same as Header.Attribute['encoding']),
-        Version (same as Header.Attribute['version']), Options (the only compatible option is [doAutoIdent])
-        Xml.AddChild (replaces root node name), Xml.DocumentElement (same as root), Node.FirstChild (same as
-        Node.ChildNodes.First), Node.LastChild (same as Node.ChildNodes.Last), Node.NextSibling, Node.PreviousSibling
-  1.6 Added comment nodes (see NodeType property)
-  1.7 Switched TStringList.Save to TStreamWriter
-      Renamed 'Indent' to 'NodeIndentStr' (TXmlDocument compatible)
-      Added LineBreak (initalized to sLineBreak (=OS depended), e.g. set to #$0A if you want unix/osx/posix compatible linebreaks)
-      Added TXmlDocument compatible functions:
-        StandAlone (same as Header.Attributes['standalone'])
-  1.8 Added basic doctype nodes (see NodeType property)
-      Changed 'Root' to 'DocumentElement' (TXmlDocument compatible)
-      Be sure to call Xml.AddChild('root') before adding nodes to Xml.DocumentElement!
-      All nodes are now in Xml.ChildNodes (incl. comments and doctypes which may appear before the DocumentElement)
-      Supports now loading of XML documents without xml header
-      Added property Xml.Xml (same as Xml.Text, TXmlDocument compatible)
-      Replaced String operations with character pointers (results in slightly faster loading)
-  1.9 Added ntProcessingInstr nodes
-      Added quote support for attributes to allow quotes inside attributes (e.g. attrib1='Franky "Gunshot" Gimley')
-      Only '<' and '&' are now automatically escaped/unescaped inside node text content
-      Added ntText nodes
-      Parsing routines modularized
-      Tries to detect BOM if no encoding is specified before loading
-      Uses ANSI encoding if an encoding is set before loading but it's not 'utf-8'
-      A text node is only created if the text consists of anything other than whitespaces/tab/returns
-      Added High(String) function for D2010-XE2
-      Replaced XMLArray with TXmlNodeList
-  2.0 BETA Dropped support for D2009 (because of missing .last, .first, etc. - see wiki for more information)
-      Added TEncoding.ANSI for D2010 (redirects to TEncoding.Default, which is with XE2 and above OS dependend!)
-      Added CDATA node type
-      Added IsTextElement
-      Expanded Find routines with NodeTypes
-      What's left to do:
-        - tests with all Delphi versions
-        - rewrite text node output
-        - small XML Test suite
-        - update example for FMX/VCL
-        - upgrade/update code comments and wiki
 
   (c) Copyrights 2011-2014 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
@@ -101,7 +49,7 @@ type
     ///	<summary> Line break handling during reading </summary>
     LineBreak: String;
     ///	<summary> Current line length </summary>
-    LineLength: Integer;
+    LineLast: Integer;
     ///	<summary> Extract text until chars found in StopChars </summary>
     function ExtractText(StopChars: String; Options: TExtractTextOptions): String; virtual;
     ///	<summary> Read next line </summary>
@@ -383,6 +331,7 @@ constructor TXmlVerySimple.Create;
 begin
   inherited;
   Root := TXmlNode.Create;
+  Root.NodeType := ntDocument;
   Root.Parent := Root;
   NodeIndentStr := '  ';
   Options := [doNodeAutoIndent];
@@ -458,7 +407,10 @@ var
   Child: TXmlNode;
 begin
   if doCompact in Options then
-    Writer.NewLine := ''
+  begin
+    Writer.NewLine := '';
+    LineBreak := '';
+  end
   else
     Writer.NewLine := LineBreak;
 
@@ -1275,7 +1227,7 @@ end;
 procedure TXmlStreamReader.IncCharPos(Value: Integer);
 begin
   Inc(CharPos, Value);
-  EndOfLine := (CharPos > LineLength - LowStr);
+  EndOfLine := (CharPos > LineLast);
 end;
 
 function TXmlStreamReader.IsUppercaseText(Value: String): Boolean;
@@ -1337,7 +1289,7 @@ begin
   Result := inherited;
   Line := Result;
   CharPos := LowStr;
-  LineLength := High(Line);
+  LineLast := High(Line);
   IncCharPos(0);
 end;
 

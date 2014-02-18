@@ -1,8 +1,8 @@
-VerySimpleXML v1.4 - a lightweight, one-unit XML reader/writer
+VerySimpleXML v2.0 beta - a lightweight, one-unit XML reader/writer
 by Dennis Spreen
 http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
-(c) Copyrights 2013 Dennis D. Spreen <dennis@spreendigital.de>
+(c) Copyrights 2014 Dennis D. Spreen <dennis@spreendigital.de>
 This unit is free and can be used for any needs. The introduction of
 any changes and the use of those changed library is permitted without
 imitations. Only requirement:
