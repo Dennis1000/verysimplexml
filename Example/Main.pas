@@ -207,13 +207,10 @@ end;
 procedure TFrmMain.BtnLoadClick(Sender: TObject);
 var
   Xml: TXmlVerySimple;
-  Start: Cardinal;
 begin
   // Load XML from Memo1
-  Start := GetTickCount;
   Xml := TXmlVerySimple.Create;
-  Xml.LoadFromFile('benchmark.xml');
-  ShowMessage(IntToStr(GetTickCount-Start)+'ms');
+  Xml.LoadFromFile('example.xml');
 
   ShowXml(Xml);
 
