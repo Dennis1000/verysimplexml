@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 11 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 12 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -325,7 +325,6 @@ begin
   FDocumentElement := NIL;
   FHeader := NIL;
 end;
-
 
 constructor TXmlVerySimple.Create;
 begin
@@ -783,15 +782,14 @@ begin
           Writer.Write(S + '?' + Node.Text + '?>');
         Exit;
       end;
+    ntXmlDecl:
+      begin
+        Writer.Write(S + '?' + Node.Name + Node.AttributeList.AsString + '?>');
+        Exit;
+      end;
   end;
 
   S := S + Node.Name + Node.AttributeList.AsString;
-
-  if (Node.NodeType = ntXmlDecl) then // The Header node doesn't have any child nodes
-  begin
-    Writer.Write(S + '?>');
-    Exit;
-  end;
 
   // Self closing tags
   if (Node.Text = '') and (not Node.HasChildNodes) then
