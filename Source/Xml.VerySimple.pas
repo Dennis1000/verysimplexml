@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 12 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 13 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -35,7 +35,7 @@ type
   TXmlNodeTypes = set of TXmlNodeType;
   TXmlNodeList = class;
   TXmlAttributeType = (atValue, atSingle);
-  TXmlOptions = set of (doNodeAutoIndent, doCompact, doParseProcessingInstr);
+  TXmlOptions = set of (doNodeAutoIndent, doCompact, doParseProcessingInstr, doPreserveWhiteSpace);
   TExtractTextOptions = set of (etoDeleteStopChar, etoStopString);
 
   TXmlStreamReader = class(TStreamReader)
@@ -219,6 +219,8 @@ type
     procedure CreateHeaderNode; virtual;
     function ExtractText(var Line: String; StopChars: String; Options: TExtractTextOptions): String; virtual;
     procedure SetDocumentElement(Value: TXMlNode); virtual;
+    procedure SetPreserveWhitespace(Value: Boolean);
+    function GetPreserveWhitespace: Boolean;
   public
     ///	<summary> Indent used for the xml output </summary>
     NodeIndentStr: String;
@@ -226,8 +228,6 @@ type
     LineBreak: String;
     ///	<summary> Options for xml output like indentation type </summary>
     Options: TXmlOptions;
-    ///	<summary> Set to True if all spaces and linebreaks should be included as a text node </summary>
-    PreserveWhitespace: Boolean;
 
     ///	<summary> Creates a new XML document parser </summary>
     constructor Create; virtual;
@@ -265,6 +265,8 @@ type
     property Version: String read GetVersion write SetVersion;
     ///	<summary> The XML as a string representation, same as .Text </summary>
     property Xml: String read GetText write SetText;
+    ///	<summary> Set to True if all spaces and linebreaks should be included as a text node, same as doPreserve option </summary>
+    property PreserveWhitespace: Boolean read GetPreserveWhitespace write SetPreserveWhitespace;
   end;
 
 implementation
@@ -372,6 +374,11 @@ begin
     Result := '';
 end;
 
+function TXmlVerySimple.GetPreserveWhitespace: Boolean;
+begin
+  Result := doPreserveWhitespace in Options;
+end;
+
 function TXmlVerySimple.GetStandAlone: String;
 begin
   if assigned(FHeader) then
@@ -460,11 +467,18 @@ begin
   while not Reader.EndOfStream do
   begin
     Reader.ReadLine;
+    if (Reader.EndOfLine) and (PreserveWhiteSpace) then
+      Parent.ChildNodes.Add(ntText).Text := LineBreak
+    else
     while not Reader.EndOfLine do
     begin
       ALine := Reader.ExtractText('<', [etoDeleteStopChar]);
       if ALine <> '' then  // Check for text nodes
+      begin
         ParseText(Aline, Parent);
+        if Reader.EndOfLine then  // if no chars available then read next line
+          Continue;
+      end;
 
       FistChar := Reader.Line[Reader.CharPos];
       if FistChar = '!' then
@@ -713,6 +727,14 @@ procedure TXmlVerySimple.SetEncoding(const Value: String);
 begin
   CreateHeaderNode;
   FHeader.Attributes['encoding'] := Value;
+end;
+
+procedure TXmlVerySimple.SetPreserveWhitespace(Value: Boolean);
+begin
+  if Value then
+    Options := Options + [doPreserveWhitespace]
+  else
+    Options := Options - [doPreserveWhitespace]
 end;
 
 procedure TXmlVerySimple.SetStandAlone(const Value: String);
@@ -1275,8 +1297,11 @@ begin
       Result := Result + Copy(Line, CharPos + (1 - LowStr) );
     end;
 
-    if EndOfStream then
+    if EndOfStream then // if no lines left then exit
+    begin
+      EndOfLine := True; // Set EndOfLine
       Exit;
+    end;
     Line := ReadLine;
     Result := Result + LineBreak;
   until False;
