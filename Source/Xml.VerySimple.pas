@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 13 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 14 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -30,12 +30,13 @@ const
   TXmlSpaces = [#$20, #$0A, #$0D, #9];
 
 type
+  TXmlVerySimple = class;
   TXmlNode = class;
   TXmlNodeType = (ntElement, ntText, ntCData, ntProcessingInstr, ntComment, ntDocument, ntDocType, ntXmlDecl);
   TXmlNodeTypes = set of TXmlNodeType;
   TXmlNodeList = class;
   TXmlAttributeType = (atValue, atSingle);
-  TXmlOptions = set of (doNodeAutoIndent, doCompact, doParseProcessingInstr, doPreserveWhiteSpace);
+  TXmlOptions = set of (doNodeAutoIndent, doCompact, doParseProcessingInstr, doPreserveWhiteSpace, doCaseInsensitive);
   TExtractTextOptions = set of (etoDeleteStopChar, etoStopString);
 
   TXmlStreamReader = class(TStreamReader)
@@ -78,6 +79,8 @@ type
 
   TXmlAttributeList = class(TObjectList<TXmlAttribute>)
   public
+    ///	<summary> The xml document of the attribute list of the node</summary>
+    Document: TXmlVerySimple;
     ///	<summary> Add a name only attribute </summary>
     function Add(const Name: String): TXmlAttribute; overload; virtual;
     ///	<summary> Returns the attribute given by name (case insensitive), NIL if no attribute found </summary>
@@ -93,6 +96,8 @@ type
   TXmlNode = class(TObject)
   private
   protected
+    FDocument: TXmlVerySimple;
+    procedure SetDocument(Value: TXmlVerySimple);
     function GetAttr(const AttrName: String): String; virtual;
     procedure SetAttr(const AttrName: String; const AttrValue: String); virtual;
   public
@@ -151,6 +156,8 @@ type
     function SetNodeType(Value: TXmlNodeType): TXmlNode; virtual;
     ///	<summary> Attributes of a node, accessible by attribute name (case insensitive) </summary>
     property Attributes[const AttrName: String]: String read GetAttr write SetAttr;
+    ///	<summary> The xml document of the node </summary>
+    property Document: TXmlVerySimple read FDocument write SetDocument;
     ///	<summary> The node name, same as property Name </summary>
     property NodeName: String read Name write Name;
     ///	<summary> The node text, same as property Text </summary>
@@ -158,7 +165,11 @@ type
   end;
 
   TXmlNodeList = class(TObjectList<TXmlNode>)
+  private
+    function IsSame(const Value1, Value2: String): Boolean;
   public
+    ///	<summary> The xml document of the node list </summary>
+    Document: TXmlVerySimple;
     ///	<summary> The parent node of the node list </summary>
     Parent: TXmlNode;
     ///	<summary> Adds a node and sets the parent of the node to the parent of the list </summary>
@@ -221,6 +232,7 @@ type
     procedure SetDocumentElement(Value: TXMlNode); virtual;
     procedure SetPreserveWhitespace(Value: Boolean);
     function GetPreserveWhitespace: Boolean;
+    function IsSame(const Value1, Value2: String): Boolean;
   public
     ///	<summary> Indent used for the xml output </summary>
     NodeIndentStr: String;
@@ -257,6 +269,8 @@ type
     property Encoding: String read GetEncoding write SetEncoding;
     ///	<summary> XML declarations are stored in here as Attributes </summary>
     property Header: TXmlNode read FHeader;
+    ///	<summary> Set to True if all spaces and linebreaks should be included as a text node, same as doPreserve option </summary>
+    property PreserveWhitespace: Boolean read GetPreserveWhitespace write SetPreserveWhitespace;
     ///	<summary> Defines the xml declaration property "StandAlone", set it to "yes" or "no" </summary>
     property StandAlone: String read GetStandAlone write SetStandAlone;
     ///	<summary> The XML as a string representation </summary>
@@ -265,8 +279,6 @@ type
     property Version: String read GetVersion write SetVersion;
     ///	<summary> The XML as a string representation, same as .Text </summary>
     property Xml: String read GetText write SetText;
-    ///	<summary> Set to True if all spaces and linebreaks should be included as a text node, same as doPreserve option </summary>
-    property PreserveWhitespace: Boolean read GetPreserveWhitespace write SetPreserveWhitespace;
   end;
 
 implementation
@@ -319,6 +331,7 @@ begin
     Result.Free;
     raise;
   end;
+  Result.Document := Self;
 end;
 
 procedure TXmlVerySimple.Clear;
@@ -334,6 +347,7 @@ begin
   Root := TXmlNode.Create;
   Root.NodeType := ntDocument;
   Root.Parent := Root;
+  Root.Document := Self;
   NodeIndentStr := '  ';
   Options := [doNodeAutoIndent];
   LineBreak := sLineBreak;
@@ -353,6 +367,7 @@ function TXmlVerySimple.CreateNode(const Name: String; NodeType: TXmlNodeType): 
 begin
   Result := TXmlNode.Create(NodeType);
   Result.Name := Name;
+  Result.Document := Self;
 end;
 
 destructor TXmlVerySimple.Destroy;
@@ -393,6 +408,14 @@ begin
     Result := FHeader.Attributes['version']
   else
     Result := '';
+end;
+
+function TXmlVerySimple.IsSame(const Value1, Value2: String): Boolean;
+begin
+  if doCaseInsensitive in Options then
+    Result := AnsiSameText(Value1, Value2)
+  else
+    Result := (Value1 = Value2);
 end;
 
 function TXmlVerySimple.GetText: String;
@@ -1031,6 +1054,13 @@ begin
   Result := Self;
 end;
 
+procedure TXmlNode.SetDocument(Value: TXmlVerySimple);
+begin
+  FDocument := Value;
+  AttributeList.Document := Value;
+  ChildNodes.Document := Value;
+end;
+
 function TXmlNode.SetNodeType(Value: TXmlNodeType): TXmlNode;
 begin
   NodeType := Value;
@@ -1081,7 +1111,8 @@ var
 begin
   Result := NIL;
   for Attribute in Self do
-    if AnsiSameText(Attribute.Name, Name) then
+    if ((assigned(Document) and Document.IsSame(Attribute.Name, Name)) or // use the documents text comparison
+      ((not assigned(Document)) and (Attribute.Name = Name))) then // or if not assigned then compare names case sensitive
     begin
       Result := Attribute;
       Break;
@@ -1101,7 +1132,7 @@ var
 begin
   Result := NIL;
   for Node in Self do
-    if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and (AnsiSameText(Node.Name, Name)) then
+    if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and (IsSame(Node.Name, Name)) then
     begin
       Result := Node;
       Break;
@@ -1123,6 +1154,7 @@ begin
     Result.Free;
     raise;
   end;
+  Result.Document := Document;
 end;
 
 function TXmlNodeList.Add(const Name: String; NodeType: TXmlNodeType): TXmlNode;
@@ -1137,9 +1169,8 @@ var
 begin
   Result := NIL;
   for Node in Self do
-    if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and
-     (AnsiSameText(Node.Name, Name)) and (Node.HasAttribute(AttrName)) and
-     (AnsiSameStr(Node.Attributes[AttrName], AttrValue)) then
+    if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and // if no type specified or node type in types
+      IsSame(Node.Name, Name) and Node.HasAttribute(AttrName) and IsSame(Node.Attributes[AttrName], AttrValue) then
     begin
       Result := Node;
       Break;
@@ -1152,8 +1183,8 @@ var
 begin
   Result := NIL;
   for Node in Self do
-    if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and
-      (AnsiSameText(Node.Name, Name)) and (Node.HasAttribute(AttrName)) then
+    if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and IsSame(Node.Name, Name) and
+      Node.HasAttribute(AttrName) then
     begin
       Result := Node;
       Break;
@@ -1171,10 +1202,10 @@ var
   Node: TXmlNode;
 begin
   Result := TXmlNodeList.Create(False);
+  Result.Document := Document;
   try
     for Node in Self do
-      if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and
-        (AnsiSameText(Node.Name, Name)) then
+      if ((NodeTypes = []) or (Node.NodeType in NodeTypes)) and IsSame(Node.Name, Name) then
         begin
           Result.Parent := Node.Parent;
           Result.Add(Node);
@@ -1205,6 +1236,7 @@ end;
 function TXmlNodeList.Insert(const Name: String; Position: Integer; NodeType: TXmlNodeType = ntElement): TXmlNode;
 begin
   Result := TXmlNode.Create;
+  Result.Document := Document;
   try
     Result.Name := Name;
     Result.NodeType := NodeType;
@@ -1213,6 +1245,12 @@ begin
     Result.Free;
     raise;
   end;
+end;
+
+function TXmlNodeList.IsSame(const Value1, Value2: String): Boolean;
+begin
+  Result := ((assigned(Document) and Document.IsSame(Value1, Value2)) or // use the documents text comparison
+    ((not assigned(Document)) and (Value1 = Value2))); // or if not assigned then compare names case sensitive
 end;
 
 function TXmlNodeList.NextSibling(Node: TXmlNode): TXmlNode;

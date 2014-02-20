@@ -48,6 +48,7 @@ http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-r
       Added CDATA node type
       Added IsTextElement
       Expanded Find routines with NodeTypes
+      Added doCaseInsensitive
       What's left to do:
         - tests with all Delphi versions
         - rewrite text node output
