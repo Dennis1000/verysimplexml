@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 14 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 15 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -67,8 +67,6 @@ type
     Name: String;
     ///	<summary> Attribute value (always a String) </summary>
     Value: String;
-    ///	<summary> Quote set while parsing an attribute, default " </summary>
-    Quote: Char;
     ///	<summary> Attributes without values are set to atSingle, else to atValue </summary>
     AttributeType: TXmlAttributeType;
     ///	<summary> Create a new attribute </summary>
@@ -251,6 +249,10 @@ type
     function AddChild(const Name: String; NodeType: TXmlNodeType = ntElement): TXmlNode; virtual;
     ///	<summary> Creates a new node but doesn't adds it to the document nodes </summary>
     function CreateNode(const Name: String; NodeType: TXmlNodeType = ntElement): TXmlNode; virtual;
+    /// <summary> Escapes XML control characters </summar>
+    class function Escape(const Value: String): String; virtual;
+    /// <summary> Translates escaped characters back into XML control characters </summar>
+    class function Unescape(const Value: String): String; virtual;
     ///	<summary> Loads the XML from a file </summary>
     procedure LoadFromFile(const FileName: String); virtual;
     ///	<summary> Loads the XML from a stream </summary>
@@ -532,6 +534,7 @@ procedure TXmlVerySimple.ParseAttributes(Value: String; AttributeList: TXmlAttri
 var
   Attribute: TXmlAttribute;
   AttrName, AttrText: String;
+  Quote: String;
 begin
   Value := TrimLeft(Value);
   while Value <> '' do
@@ -549,15 +552,10 @@ begin
     Value := TrimLeft(Value);
     if Value <> '' then
     begin
-      Attribute.Quote := Value[LowStr];
+      Quote := Value[LowStr];
       Delete(Value, 1, 1);
-      AttrText := ExtractText(Value, Attribute.Quote, [etoDeleteStopChar]); // Get Attribute Value
-      AttrText := ReplaceStr(AttrText, '&amp;', '&');
-      AttrText := ReplaceStr(AttrText, '&lt;', '<');
-      if Attribute.Quote = '"' then
-        Attribute.Value := ReplaceStr(AttrText, '&quot;', '"')
-      else
-        Attribute.Value := ReplaceStr(AttrText, '&apos;', '''');
+      AttrText := ExtractText(Value, Quote, [etoDeleteStopChar]); // Get Attribute Value
+      Attribute.Value := Unescape(AttrText);
       Value := TrimLeft(Value);
     end;
   end;
@@ -659,8 +657,7 @@ begin
   if Result = Parent then // only non-self closing nodes may have a text
   begin
     ALine := Reader.ExtractText('<', []);
-    ALine := ReplaceStr(ALine, '&amp;', '&');
-    ALine := ReplaceStr(ALine, '&lt;', '<');
+    ALine := Unescape(ALine);
 
     if PreserveWhiteSpace then
       Result.Text := ALine
@@ -773,6 +770,15 @@ begin
 end;
 
 
+class function TXmlVerySimple.Unescape(const Value: String): String;
+begin
+  Result := ReplaceStr(Value, '&lt;', '<');
+  Result := ReplaceStr(Result, '&gt;', '>');
+  Result := ReplaceStr(Result, '&quot;', '"');
+  Result := ReplaceStr(Result, '&apos;', '''');
+  Result := ReplaceStr(Result, '&amp;', '&');
+end;
+
 procedure TXmlVerySimple.SetText(const Value: String);
 var
   Stream: TStringStream;
@@ -846,9 +852,7 @@ begin
   S := S + '>';
   if Node.Text <> '' then
   begin
-    Text := ReplaceStr(Node.Text, '&', '&amp;');
-    Text := ReplaceStr(Text, '<', '&lt;');
-    S := S + Text;
+    S := S + Escape(Node.Text);
   end
   else
     Text := '';
@@ -888,6 +892,15 @@ begin
   end;
 end;
 
+
+class function TXmlVerySimple.Escape(const Value: String): String;
+begin
+  Result := ReplaceStr(Value, '&', '&amp;');
+  Result := ReplaceStr(Result, '<', '&lt;');
+  Result := ReplaceStr(Result, '>', '&gt;');
+  Result := ReplaceStr(Result, '"', '&quot;');
+  Result := ReplaceStr(Result, '''', '&apos;');
+end;
 
 function TXmlVerySimple.ExtractText(var Line: String; StopChars: String;
   Options: TExtractTextOptions): String;
@@ -1357,28 +1370,16 @@ end;
 { TXmlAttribute }
 
 function TXmlAttribute.AsString: String;
-var
-  EscapedValue: String;
 begin
   Result := Name;
   if AttributeType = atSingle then
     Exit;
-
-  EscapedValue := ReplaceStr(Value, '&', '&amp;');
-  EscapedValue := ReplaceStr(EscapedValue, '<', '&lt;');
-
-  if Quote = '"' then
-    EscapedValue := ReplaceStr(EscapedValue, '"', '&quot;')
-  else
-    EscapedValue :=  ReplaceStr(EscapedValue, '''', '&apos;');
-
-  Result := Result + '=' + Quote + EscapedValue + Quote;
+  Result := Result + '="' + TXmlVerySimple.Escape(Value) + '"';
 end;
 
 constructor TXmlAttribute.Create;
 begin
   AttributeType := atSingle;
-  Quote := '"';  // Default attribute quotating mark
 end;
 
 
