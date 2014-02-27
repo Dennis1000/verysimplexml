@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<catalog>
+  <book id="bk105">
+    <author>Charles Dohan &amp; Enzo Piacci</author>
+    <title>Salvatore &quot;Toto&quot; D&apos;Aquila</title>
+    <genre>info</genre>
+    <publish_date>About &gt;1925</publish_date>
+    <lend_count>&lt;5</lend_count>
+  </book>
+</catalog>

@@ -1,0 +1,21 @@
+﻿linebreak=windows
+findnode=catalog
+addnode=book
+  addattribute=id
+    setvalue=bk105
+  addnode=author
+    settext=Charles Dohan & Enzo Piacci
+    parent
+  addnode=title
+    settext=Salvatore "Toto" D'Aquila
+    parent
+  addnode=genre
+    settext=info
+    parent
+  addnode=publish_date
+    settext=About >1925
+    parent
+  addnode=lend_count
+    settext=<5
+    parent
+    

@@ -1,0 +1,15 @@
+﻿linebreak=windows
+findnode=catalog
+addnode=book
+  addattribute=id
+    setvalue=bk103
+  addnode=author
+    settext=Corets, Eva
+    parent
+  addnode=title
+    settext=Maeve Ascendant
+    parent
+  addnode=genre
+    settext=Fantasy
+    parent
+    
