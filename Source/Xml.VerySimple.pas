@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 15 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 16 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -62,17 +62,20 @@ type
   end;
 
   TXmlAttribute = class(TObject)
+  private
+    FValue: String;
+    procedure SetValue(Value: String);
   public
     ///	<summary> Attribute name </summary>
     Name: String;
-    ///	<summary> Attribute value (always a String) </summary>
-    Value: String;
     ///	<summary> Attributes without values are set to atSingle, else to atValue </summary>
     AttributeType: TXmlAttributeType;
     ///	<summary> Create a new attribute </summary>
     constructor Create; virtual;
     ///	<summary> Return the attribute as a String </summary>
     function AsString: String;
+    ///	<summary> Attribute value (always a String) </summary>
+    property Value: String read FValue write SetValue;
   end;
 
   TXmlAttributeList = class(TObjectList<TXmlAttribute>)
@@ -1382,5 +1385,11 @@ begin
   AttributeType := atSingle;
 end;
 
+
+procedure TXmlAttribute.SetValue(Value: String);
+begin
+  FValue := Value;
+  AttributeType := atValue;
+end;
 
 end.
