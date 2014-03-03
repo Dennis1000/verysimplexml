@@ -13,7 +13,7 @@ XMLTestSuite source code:
 Source\
 
 XML-TestFiles:
-TestFile\
+TestFiles\
 
 
 XML test files
@@ -39,6 +39,7 @@ Processing instructions files may contain one ore more of these commands
 compact=1                  sets the [doCompact] options
 indent="[indent]"          sets the NodeIndentStr to [indent] (quotes will be omitted)
 linebreak=unix|windows     sets the line break to unix style (#$0A) or to windows style (#$0D#$0A)
+encoding=<encstr>          sets the xml declaration encoding to <encstr>
 
 findnode=<nodename>        finds a node with the name <nodename>, same as .FindNode('<nodename>')
 addnode=<nodename>         adds a new node to the current node

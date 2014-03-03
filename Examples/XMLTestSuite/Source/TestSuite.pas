@@ -185,6 +185,11 @@ begin
           Xml.LineBreak := #$0D#$0A;
       end
       else
+      if Command='encoding' then
+      begin
+        Xml.Encoding := Value;
+      end
+      else
       if Command='findnode' then
       begin
         Node := Node.ChildNodes.Find(Value);

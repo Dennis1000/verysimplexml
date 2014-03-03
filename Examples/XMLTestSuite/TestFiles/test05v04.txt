@@ -1,0 +1,1 @@
+﻿Encoding test - UTF-8 without BOM (with explicit utf-8 encoding)
