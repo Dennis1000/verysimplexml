@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 16 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 18 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -29,7 +29,7 @@ uses
 const
   TXmlSpaces = [#$20, #$0A, #$0D, #9];
 
-type
+  type
   TXmlVerySimple = class;
   TXmlNode = class;
   TXmlNodeType = (ntElement, ntText, ntCData, ntProcessingInstr, ntComment, ntDocument, ntDocType, ntXmlDecl);
@@ -38,6 +38,10 @@ type
   TXmlAttributeType = (atValue, atSingle);
   TXmlOptions = set of (doNodeAutoIndent, doCompact, doParseProcessingInstr, doPreserveWhiteSpace, doCaseInsensitive);
   TExtractTextOptions = set of (etoDeleteStopChar, etoStopString);
+
+  {$IFNDEF AUTOREFCOUNT}
+  WeakAttribute = class(TCustomAttribute);
+  {$ENDIF}
 
   TXmlStreamReader = class(TStreamReader)
   public
@@ -52,11 +56,11 @@ type
     ///	<summary> Current line length </summary>
     LineLast: Integer;
     ///	<summary> Extract text until chars found in StopChars </summary>
-    function ExtractText(StopChars: String; Options: TExtractTextOptions): String; virtual;
+    function ExtractText(const StopChars: String; Options: TExtractTextOptions): String; virtual;
     ///	<summary> Read next line </summary>
     function ReadLine: String; override;
     ///	<summary> Returns True if the first uppercased characters at the current position match Value </summary>
-    function IsUppercaseText(Value: String): Boolean; virtual;
+    function IsUppercaseText(const Value: String): Boolean; virtual;
     ///	<summary> Proceed with the next character(s) (value optional, default 1) </summary>
     procedure IncCharPos(Value: Integer = 1); virtual;
   end;
@@ -81,7 +85,7 @@ type
   TXmlAttributeList = class(TObjectList<TXmlAttribute>)
   public
     ///	<summary> The xml document of the attribute list of the node</summary>
-    Document: TXmlVerySimple;
+    [Weak] Document: TXmlVerySimple;
     ///	<summary> Add a name only attribute </summary>
     function Add(const Name: String): TXmlAttribute; overload; virtual;
     ///	<summary> Returns the attribute given by name (case insensitive), NIL if no attribute found </summary>
@@ -97,7 +101,7 @@ type
   TXmlNode = class(TObject)
   private
   protected
-    FDocument: TXmlVerySimple;
+    [Weak] FDocument: TXmlVerySimple;
     procedure SetDocument(Value: TXmlVerySimple);
     function GetAttr(const AttrName: String): String; virtual;
     procedure SetAttr(const AttrName: String; const AttrValue: String); virtual;
@@ -111,10 +115,9 @@ type
     ///	<summary> The node type, see TXmlNodeType </summary>
     NodeType: TXmlNodeType;
     ///	<summary> Parent node, may be NIL </summary>
-    Parent: TXmlNode;
+    [Weak] Parent: TXmlNode;
     ///	<summary> Text value of the node </summary>
     Text: String;
-
     /// <summary> Creates a new XML node </summary>
     constructor Create(ANodeType: TXmlNodeType = ntElement); virtual;
     ///	<summary> Removes the node from its parent and frees all of its childs </summary>
@@ -170,9 +173,9 @@ type
     function IsSame(const Value1, Value2: String): Boolean;
   public
     ///	<summary> The xml document of the node list </summary>
-    Document: TXmlVerySimple;
+    [Weak] Document: TXmlVerySimple;
     ///	<summary> The parent node of the node list </summary>
-    Parent: TXmlNode;
+    [Weak] Parent: TXmlNode;
     ///	<summary> Adds a node and sets the parent of the node to the parent of the list </summary>
     function Add(Value: TXmlNode): Integer; overload; virtual;
     ///	<summary> Creates a new node of type NodeType (default ntElement) and adds it to the list </summary>
@@ -207,8 +210,8 @@ type
   private
   protected
     Root: TXmlNode;
-    FHeader: TXmlNode;
-    FDocumentElement: TXmlNode;
+    [Weak] FHeader: TXmlNode;
+    [Weak] FDocumentElement: TXmlNode;
     procedure Parse(Reader: TXmlStreamReader); virtual;
     procedure ParseComment(Reader: TXmlStreamReader; var Parent: TXmlNode); virtual;
     procedure ParseDocType(Reader: TXmlStreamReader; var Parent: TXmlNode); virtual;
@@ -341,9 +344,9 @@ end;
 
 procedure TXmlVerySimple.Clear;
 begin
-  Root.Clear;
   FDocumentElement := NIL;
   FHeader := NIL;
+  Root.Clear;
 end;
 
 constructor TXmlVerySimple.Create;
@@ -377,6 +380,8 @@ end;
 
 destructor TXmlVerySimple.Destroy;
 begin
+  Root.Parent := NIL;
+  Root.Clear;
   Root.Free;
   inherited;
 end;
@@ -958,10 +963,9 @@ end;
 
 destructor TXmlNode.Destroy;
 begin
-  if assigned(Parent) then
-    Parent.ChildNodes.Extract(Self);
-  AttributeList.Free;
+  Clear;
   ChildNodes.Free;
+  AttributeList.Free;
   inherited;
 end;
 
@@ -1304,15 +1308,14 @@ begin
   EndOfLine := (CharPos > LineLast);
 end;
 
-function TXmlStreamReader.IsUppercaseText(Value: String): Boolean;
+function TXmlStreamReader.IsUppercaseText(const Value: String): Boolean;
 begin
   Result := (Uppercase(copy(Line, CharPos, Length(Value))) = Value);
   if Result then
     IncCharPos(Length(Value));
 end;
 
-
-function TXmlStreamReader.ExtractText(StopChars: String;
+function TXmlStreamReader.ExtractText(const StopChars: String;
   Options: TExtractTextOptions): String;
 var
   TempCharPos, FoundPos: Integer;
@@ -1384,7 +1387,6 @@ constructor TXmlAttribute.Create;
 begin
   AttributeType := atSingle;
 end;
-
 
 procedure TXmlAttribute.SetValue(Value: String);
 begin

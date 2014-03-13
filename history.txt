@@ -51,6 +51,7 @@ http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-r
       Added doCaseInsensitive (default: node and attribute names are case sensitive!)
       Removed extra Quote support for attributes
       Escape/Unescapes now all 5 predefined entities (in attributes and nodes)
+      Added weak references for nextgen ARCtic compiler
 
       What's left to do:
         - tests with all Delphi versions
