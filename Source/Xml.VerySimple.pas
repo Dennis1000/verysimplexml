@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 18 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 19 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -27,9 +27,9 @@ uses
   Classes, SysUtils, Generics.Defaults, Generics.Collections;
 
 const
-  TXmlSpaces = [#$20, #$0A, #$0D, #9];
+  TXmlSpaces = #$20 + #$0A + #$0D + #9;
 
-  type
+type
   TXmlVerySimple = class;
   TXmlNode = class;
   TXmlNodeType = (ntElement, ntText, ntCData, ntProcessingInstr, ntComment, ntDocument, ntDocType, ntXmlDecl);
@@ -68,7 +68,7 @@ const
   TXmlAttribute = class(TObject)
   private
     FValue: String;
-    procedure SetValue(Value: String);
+    procedure SetValue(const Value: String);
   public
     ///	<summary> Attribute name </summary>
     Name: String;
@@ -193,7 +193,7 @@ const
     ///	<summary> Return a list of child nodes with the given name and (optional) node types </summary>
     function FindNodes(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): TXmlNodeList; virtual;
     ///	<summary> Returns True if the list contains a node with the given name </summary>
-    function HasNode(Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): Boolean; virtual;
+    function HasNode(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): Boolean; virtual;
     ///	<summary> Inserts a node at the given position </summary>
     function Insert(const Name: String; Position: Integer; NodeType: TXmlNodeType = ntElement): TXmlNode; overload; virtual;
     ///	<summary> Returns the first child node, same as .First </summary>
@@ -219,7 +219,7 @@ const
     procedure ParseCData(Reader: TXmlStreamReader; var Parent: TXmlNode); virtual;
     procedure ParseText(const Line: String; Parent: TXmlNode); virtual;
     function ParseTag(Reader: TXmlStreamReader; ParseText: Boolean; var Parent: TXmlNode): TXmlNode; overload; virtual;
-    function ParseTag(Tag: String; var Parent: TXmlNode): TXmlNode; overload; virtual;
+    function ParseTag(const TagStr: String; var Parent: TXmlNode): TXmlNode; overload; virtual;
     procedure Walk(Writer: TStreamWriter; const PrefixNode: String; Node: TXmlNode); virtual;
     procedure SetText(const Value: String); virtual;
     function GetText: String; virtual;
@@ -232,7 +232,7 @@ const
     function GetStandAlone: String; virtual;
     function GetChildNodes: TXmlNodeList; virtual;
     procedure CreateHeaderNode; virtual;
-    function ExtractText(var Line: String; StopChars: String; Options: TExtractTextOptions): String; virtual;
+    function ExtractText(var Line: String; const StopChars: String; Options: TExtractTextOptions): String; virtual;
     procedure SetDocumentElement(Value: TXMlNode); virtual;
     procedure SetPreserveWhitespace(Value: Boolean);
     function GetPreserveWhitespace: Boolean;
@@ -244,7 +244,6 @@ const
     LineBreak: String;
     ///	<summary> Options for xml output like indentation type </summary>
     Options: TXmlOptions;
-
     ///	<summary> Creates a new XML document parser </summary>
     constructor Create; virtual;
     ///	<summary> Destroys the XML document parser </summary>
@@ -264,7 +263,7 @@ const
     ///	<summary> Loads the XML from a stream </summary>
     procedure LoadFromStream(const Stream: TStream); virtual;
     ///	<summary> Parse attributes into the attribute list for a given string </summary>
-    procedure ParseAttributes(Value: String; AttributeList: TXmlAttributeList); virtual;
+    procedure ParseAttributes(const AttribStr: String; AttributeList: TXmlAttributeList); virtual;
     ///	<summary> Saves the XML to a file </summary>
     procedure SaveToFile(const FileName: String); virtual;
     ///	<summary> Saves the XML to a stream, the encoding is specified in the .Encoding property </summary>
@@ -538,13 +537,14 @@ begin
   end;
 end;
 
-procedure TXmlVerySimple.ParseAttributes(Value: String; AttributeList: TXmlAttributeList);
+procedure TXmlVerySimple.ParseAttributes(const AttribStr: String; AttributeList: TXmlAttributeList);
 var
   Attribute: TXmlAttribute;
   AttrName, AttrText: String;
   Quote: String;
+  Value: String;
 begin
-  Value := TrimLeft(Value);
+  Value := TrimLeft(AttribStr);
   while Value <> '' do
   begin
     AttrName := ExtractText(Value, ' =', []);
@@ -582,7 +582,7 @@ begin
   begin
     TextNode := False;
     for SingleChar in Line do
-      if not CharInSet(SingleChar, TXmlSpaces) then
+      if AnsiStrScan(TXmlSpaces, SingleChar) = NIL then
       begin
         TextNode := True;
         Break;
@@ -671,7 +671,7 @@ begin
       Result.Text := ALine
     else
       for SingleChar in ALine do
-        if not CharInSet(SingleChar, TXmlSpaces) then
+        if AnsiStrScan(TXmlSpaces, SingleChar) = NIL then
         begin
           Result.Text := ALine;
           Break;
@@ -679,14 +679,15 @@ begin
   end;
 end;
 
-function TXmlVerySimple.ParseTag(Tag: String; var Parent: TXmlNode): TXmlNode;
+function TXmlVerySimple.ParseTag(const TagStr: String; var Parent: TXmlNode): TXmlNode;
 var
   Node: TXmlNode;
   ALine: String;
   CharPos: Integer;
+  Tag: String;
 begin
   // A closing tag does not have any attributes nor text
-  if (Tag <> '') and (Tag[LowStr] = '/') then
+  if (TagStr <> '') and (TagStr[LowStr] = '/') then
   begin
     Result := Parent;
     Parent := Parent.Parent;
@@ -696,6 +697,7 @@ begin
   // Creat a new new ntElement node
   Node := Parent.ChildNodes.Add;
   Result := Node;
+  Tag := TagStr;
 
   // Check for a self-closing Tag (does not have any text)
   if (Tag <> '') and (Tag[High(Tag)] = '/') then
@@ -910,7 +912,7 @@ begin
   Result := ReplaceStr(Result, '''', '&apos;');
 end;
 
-function TXmlVerySimple.ExtractText(var Line: String; StopChars: String;
+function TXmlVerySimple.ExtractText(var Line: String; const StopChars: String;
   Options: TExtractTextOptions): String;
 var
   CharPos, FoundPos: Integer;
@@ -1248,7 +1250,7 @@ begin
   Result := Items[Index];
 end;
 
-function TXmlNodeList.HasNode(Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): Boolean;
+function TXmlNodeList.HasNode(const Name: String; NodeTypes: TXmlNodeTypes = [ntElement]): Boolean;
 begin
   Result := Assigned(Find(Name, NodeTypes));
 end;
@@ -1388,7 +1390,7 @@ begin
   AttributeType := atSingle;
 end;
 
-procedure TXmlAttribute.SetValue(Value: String);
+procedure TXmlAttribute.SetValue(const Value: String);
 begin
   FValue := Value;
   AttributeType := atValue;
