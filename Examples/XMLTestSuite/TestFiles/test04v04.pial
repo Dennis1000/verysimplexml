@@ -1,0 +1,9 @@
+﻿linebreak=windows
+findnode=catalog
+findnode=book
+  findnode=author
+    istext=Gambardella, Matthew
+    Parent
+  findnode=title
+    istext=XML Developers Guide
+    parent

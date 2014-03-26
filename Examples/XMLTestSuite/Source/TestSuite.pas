@@ -118,7 +118,7 @@ begin
 
       OutputStream := TStringStream.Create;
       Xml.SaveToStream(OutputStream);
-      Xml.SaveToFile(Name + '.out2');
+      //Xml.SaveToFile(Name + '.out2');
       Xml.Free;
 
       InputStream := TStringStream.Create;
@@ -170,6 +170,9 @@ begin
 
       if (Command='compact') and (Value='1') then
         Xml.Options := Xml.Options + [doCompact]
+      else
+      if (Command='writebom') and (Value='0') then
+        Xml.Options := Xml.Options - [doWriteBOM]
       else
       if Command='indent' then
       begin

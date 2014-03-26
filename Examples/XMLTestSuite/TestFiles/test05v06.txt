@@ -1,0 +1,1 @@
+﻿Encoding test - Node content with windows linebreaks

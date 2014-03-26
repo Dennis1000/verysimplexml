@@ -1,0 +1,1 @@
+﻿Encoding test - Node content with unix linebreaks, convert xml to windows linebreaks (but not content)

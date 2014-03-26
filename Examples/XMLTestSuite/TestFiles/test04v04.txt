@@ -1,0 +1,1 @@
+﻿Structure test - XML with spaces and tabs at the end of the nodes
