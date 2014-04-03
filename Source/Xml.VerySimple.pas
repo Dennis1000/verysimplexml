@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 BETA 20 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0 BETA 21 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE5 by Dennis Spreen
   http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
 
@@ -241,15 +241,15 @@ type
     /// <summary> Translates escaped characters back into XML control characters </summar>
     class function Unescape(const Value: String): String; virtual;
     ///	<summary> Loads the XML from a file </summary>
-    procedure LoadFromFile(const FileName: String; BufferSize: Integer = 4096); virtual;
+    function LoadFromFile(const FileName: String; BufferSize: Integer = 4096): TXmlVerySimple; virtual;
     ///	<summary> Loads the XML from a stream </summary>
-    procedure LoadFromStream(const Stream: TStream; BufferSize: Integer = 4096); virtual;
+    function LoadFromStream(const Stream: TStream; BufferSize: Integer = 4096): TXmlVerySimple; virtual;
     ///	<summary> Parse attributes into the attribute list for a given string </summary>
     procedure ParseAttributes(const AttribStr: String; AttributeList: TXmlAttributeList); virtual;
     ///	<summary> Saves the XML to a file </summary>
-    procedure SaveToFile(const FileName: String); virtual;
+    function SaveToFile(const FileName: String): TXmlVerySimple; virtual;
     ///	<summary> Saves the XML to a stream, the encoding is specified in the .Encoding property </summary>
-    procedure SaveToStream(const Stream: TStream); virtual;
+    function SaveToStream(const Stream: TStream): TXmlVerySimple; virtual;
     ///	<summary> A list of all root nodes of the document </summary>
     property ChildNodes: TXmlNodeList read GetChildNodes;
     ///	<summary> Returns the first element node </summary>
@@ -428,7 +428,10 @@ function TXmlVerySimple.GetText: String;
 var
   Stream: TStringStream;
 begin
-  Stream := TStringStream.Create;
+  if AnsiSameText(Encoding, 'utf-8') then
+    Stream := TStringStream.Create('', TEncoding.UTF8)
+  else
+    Stream := TStringStream.Create('', TEncoding.ANSI);
   try
     SaveToStream(Stream);
     Result := Stream.DataString;
@@ -454,7 +457,7 @@ begin
     Walk(Writer, '', Child);
 end;
 
-procedure TXmlVerySimple.LoadFromFile(const FileName: String; BufferSize: Integer = 4096);
+function TXmlVerySimple.LoadFromFile(const FileName: String; BufferSize: Integer = 4096): TXmlVerySimple;
 var
   Stream: TFileStream;
 begin
@@ -464,9 +467,10 @@ begin
   finally
     Stream.Free;
   end;
+  Result := Self;
 end;
 
-procedure TXmlVerySimple.LoadFromStream(const Stream: TStream; BufferSize: Integer = 4096);
+function TXmlVerySimple.LoadFromStream(const Stream: TStream; BufferSize: Integer = 4096): TXmlVerySimple;
 var
   Reader: TStreamReader;
 begin
@@ -482,6 +486,7 @@ begin
   finally
     Reader.Free;
   end;
+  Result := Self;
 end;
 
 procedure TXmlVerySimple.Parse(Reader: TStreamReader);
@@ -709,7 +714,7 @@ begin
 end;
 
 
-procedure TXmlVerySimple.SaveToFile(const FileName: String);
+function TXmlVerySimple.SaveToFile(const FileName: String): TXmlVerySimple;
 var
   Stream: TFileStream;
 begin
@@ -719,9 +724,10 @@ begin
   finally
     Stream.Free;
   end;
+  Result := Self;
 end;
 
-procedure TXmlVerySimple.SaveToStream(const Stream: TStream);
+function TXmlVerySimple.SaveToStream(const Stream: TStream): TXmlVerySimple;
 var
   Writer: TStreamWriter;
 begin
@@ -737,6 +743,7 @@ begin
   finally
     Writer.Free;
   end;
+  Result := Self;
 end;
 
 procedure TXmlVerySimple.SetDocumentElement(Value: TXMlNode);
@@ -786,7 +793,7 @@ procedure TXmlVerySimple.SetText(const Value: String);
 var
   Stream: TStringStream;
 begin
-  Stream := TStringStream.Create;
+  Stream := TStringStream.Create('', TEncoding.UTF8);
   try
     Stream.WriteString(Value);
     Stream.Position := 0;
