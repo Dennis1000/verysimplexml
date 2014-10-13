@@ -1,6 +1,6 @@
-VerySimpleXML v2.0 beta - a lightweight, one-unit XML reader/writer
+VerySimpleXML v2.0 - a lightweight, one-unit XML reader/writer
 by Dennis Spreen
-http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-reader-and-writer/
+http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
 
   1.0 Initial release
   1.1 Removed "extended" quotation marks support, Renamed to XmlVerySimple
@@ -52,11 +52,11 @@ http://blog.spreendigital.de/2011/11/10/verysimplexml-a-lightweight-delphi-xml-r
       Removed extra Quote support for attributes
       Escape/Unescapes now all 5 predefined entities (in attributes and nodes)
       Added weak references for nextgen ARCtic compiler
+      Adpated TXMLStreamReader to read from the buffered string
+      Added WriteBOM option (set by default)
 
-      What's left to do:
-        - tests with all Delphi versions
-        - rewrite text node output
-        - small XML Test suite
+  2.0 Turned Beta 21 into 2.0 Release
+      What's still left to do:
         - update example for FMX/VCL
         - upgrade/update code comments and wiki
 
