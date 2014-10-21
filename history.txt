@@ -1,4 +1,4 @@
-VerySimpleXML v2.0 - a lightweight, one-unit XML reader/writer
+VerySimpleXML v2.0.1 - a lightweight, one-unit XML reader/writer
 by Dennis Spreen
 http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
 
@@ -56,9 +56,13 @@ http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
       Added WriteBOM option (set by default)
 
   2.0 Turned Beta 21 into 2.0 Release
+
+  2.0.1 [Fix] NextSibling/prevSibling bug
+
       What's still left to do:
         - update example for FMX/VCL
         - upgrade/update code comments and wiki
+
 
 
 (c) Copyrights 2014 Dennis D. Spreen <dennis@spreendigital.de>

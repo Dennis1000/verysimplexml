@@ -1,4 +1,4 @@
-﻿{ VerySimpleXML v2.0 - a lightweight, one-unit, cross-platform XML reader/writer
+﻿{ VerySimpleXML v2.0.1 - a lightweight, one-unit, cross-platform XML reader/writer
   for Delphi 2010-XE7 by Dennis Spreen
   http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
 
@@ -1272,7 +1272,7 @@ begin
   begin
     Index := Self.IndexOf(Node);
     if (Index >= 0) and (Index + 1 < Count) then
-      Result := Self[Index]
+      Result := Self[Index + 1]
     else
       Result := NIL;
   end;
@@ -1284,7 +1284,7 @@ var
 begin
   Index := Self.IndexOf(Node);
   if Index - 1 >= 0 then
-    Result := Self[Index]
+    Result := Self[Index - 1]
   else
     Result := NIL;
 end;
