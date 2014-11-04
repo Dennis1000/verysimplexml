@@ -52,8 +52,11 @@ begin
 
   // and now delete all comment nodes (found on the first level of the DocumentElement root)
   CommentNodes := Xml.DocumentElement.FindNodes('', [ntComment]);
+
+  // In order to delete a node, just remove it from the parent (do not free it without deleting it from its parent!)
   for Node in CommentNodes do
-    Node.Free;
+    Node.Parent.ChildNodes.Remove(Node);
+
   CommentNodes.Free;
 
   // Write to memo, the first 3 chars are the unicode BOM
