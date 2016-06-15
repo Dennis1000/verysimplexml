@@ -2,7 +2,7 @@ VerySimpleXML v2.0.2 - a lightweight, one-unit, cross-platform XML reader/writer
 for Delphi 2010 - 10.1 Berlin by Dennis Spreen
 http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
 
-(c) Copyrights 2014 Dennis D. Spreen <dennis@spreendigital.de>
+(c) Copyrights 2016 Dennis D. Spreen <dennis@spreendigital.de>
 This unit is free and can be used for any needs. The introduction of
 any changes and the use of those changed library is permitted without
 imitations. Only requirement:
