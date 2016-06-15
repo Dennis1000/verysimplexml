@@ -1,4 +1,4 @@
-VerySimpleXML v2.0.1 - a lightweight, one-unit XML reader/writer
+VerySimpleXML v2.0.2 - a lightweight, one-unit XML reader/writer
 by Dennis Spreen
 http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
 
