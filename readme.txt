@@ -1,5 +1,5 @@
-VerySimpleXML v2.0.2 - a lightweight, one-unit XML reader/writer
-by Dennis Spreen
+VerySimpleXML v2.0.2 - a lightweight, one-unit, cross-platform XML reader/writer
+for Delphi 2010 - 10.1 Berlin by Dennis Spreen
 http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
 
 (c) Copyrights 2014 Dennis D. Spreen <dennis@spreendigital.de>
