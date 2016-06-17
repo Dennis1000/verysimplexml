@@ -44,13 +44,15 @@ type
   WeakAttribute = class(TCustomAttribute);
   {$ENDIF}
 
+  TStreamReaderFillBuffer = procedure(var Encoding: TEncoding) of object;
+
   TXmlStreamReader = class(TStreamReader)
   protected
     FBufferedData: TStringBuilder;
     FNoDataInStream: PBoolean;
-    FFillBuffer: TRttiMethod;
+    FFillBuffer: TStreamReaderFillBuffer;
+    procedure FillBuffer;
     ///	<summary> Call to FillBuffer method of TStreamreader </summary>
-    procedure FillBuffer(Encoding: TEncoding);
   public
     ///	<summary> Extend the TStreamReader with RTTI pointers </summary>
     constructor Create(Stream: TStream; Encoding: TEncoding; DetectBOM: Boolean = False; BufferSize: Integer = 4096);
@@ -297,6 +299,13 @@ implementation
 
 uses
   StrUtils;
+
+type
+  TStreamReaderHelper = class helper for TStreamReader
+  public
+    procedure GetFillBuffer(var Method: TStreamReaderFillBuffer);
+  end;
+
 
 const
 {$IF CompilerVersion >= 24} // Delphi XE3+ can use Low(), High() and TEncoding.ANSI
@@ -1334,12 +1343,17 @@ begin
   inherited;
   FBufferedData := TRttiContext.Create.GetType(TStreamReader).GetField('FBufferedData').GetValue(Self).AsObject as TStringBuilder;
   FNoDataInStream := Pointer(NativeInt(Self) + TRttiContext.Create.GetType(TStreamReader).GetField('FNoDataInStream').Offset);
-  FFillBuffer := TRttiContext.Create.GetType(TStreamReader).GetMethod('FillBuffer');
+  GetFillBuffer(FFillBuffer);
 end;
 
-procedure TXmlStreamReader.FillBuffer(Encoding: TEncoding);
+procedure TXmlStreamReader.FillBuffer;
+var
+  TempEncoding: TEncoding;
 begin
-  FFillBuffer.Invoke(Self, [Encoding]);
+  TempEncoding := CurrentEncoding;
+  FFillBuffer(TempEncoding);
+  if TempEncoding <> CurrentEncoding then
+    TRttiContext.Create.GetType(TStreamReader).GetField('FEncoding').SetValue(Self, TempEncoding)
 end;
 
 function TXmlStreamReader.FirstChar: String;
@@ -1388,7 +1402,7 @@ begin
     Exit;
 
   if (Self.FBufferedData.Length < Value) and (not Self.FNoDataInStream^) then
-    Self.FillBuffer(Self.CurrentEncoding);
+    FillBuffer;
 
   Result := (Self.FBufferedData.Length >= Value);
 end;
@@ -1414,7 +1428,7 @@ begin
     // if we're searching for a string then assure the buffer is wide enough
     if (etoStopString in Options) and (NewLineIndex + StopCharLength > Self.FBufferedData.Length) and
       (not Self.FNoDataInStream^) then
-      Self.FillBuffer(Self.CurrentEncoding);
+      FillBuffer;
 
     if NewLineIndex >= Self.FBufferedData.Length then
     begin
@@ -1425,7 +1439,7 @@ begin
       end
       else
       begin
-        Self.FillBuffer(Self.CurrentEncoding);
+        FillBuffer;
         if Self.FBufferedData.Length = 0 then
           Break;
       end;
@@ -1481,5 +1495,14 @@ begin
   Self.FBufferedData.Remove(0, PostNewLineIndex);
 end;
 
+
+{ TStreamReaderHelper }
+
+procedure TStreamReaderHelper.GetFillBuffer(
+  var Method: TStreamReaderFillBuffer);
+begin
+  TMethod(Method).Code := @TStreamReader.FillBuffer;
+  TMethod(Method).Data := Self;
+end;
 
 end.

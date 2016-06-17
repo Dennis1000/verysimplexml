@@ -31,15 +31,20 @@ var
   Xml: TXmlVerySimple;
   BookNode, EntityNode: TXmlNode;
   Books: TXmlNodeList;
+  I: Integer;
 begin
   // Create a XML document first, and save it
   Xml := TXmlVerySimple.Create;
   Xml.AddChild('books');
-  Xml.DocumentElement.AddChild('book').SetAttribute('id', 'bk101').AddChild('author').
-    SetText('Gambardella, Matthew').Parent.AddChild('title').Text := 'XML Developer''s Guide';
+  for I := 1 to 100 do
+  begin
+    Xml.DocumentElement.AddChild('book').SetAttribute('id', 'bk101-' + IntToStr(I)).AddChild('author').
+      SetText('Gambardella, Matthew').Parent.AddChild('title').Text := 'XML Developer''s Guide Part ' + IntToStr(I);
+  end;
 
   Xml.DocumentElement.AddChild('book').SetAttribute('id', 'bk103').AddChild('author').
     SetText('Corets, Eva').Parent.AddChild('title').Text := 'Maeve Ascendant';
+
   Xml.SaveToFile('example4.xml');
   Xml.Free;
 
