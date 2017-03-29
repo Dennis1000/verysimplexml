@@ -61,12 +61,15 @@ http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
 
   2.0.2 Added support for Delphi 10.1 Berlin (replaced class helper with TXmlStreamreader and RTTI)
 
+  2.0.3 [Fix] NodeType was ignored by TXmlNode.InsertChild
+	[Fix] Still not supported but better parsing of markup elements lines like !ELEMENT, !ATTLIST and !ENTITY
+
       What's still left to do:
         - update example for FMX/VCL
         - upgrade/update code comments and wiki
 
 
-(c) Copyrights 2016 Dennis D. Spreen <dennis@spreendigital.de>
+(c) Copyrights 2017 Dennis D. Spreen <dennis@spreendigital.de>
 This unit is free and can be used for any needs. The introduction of
 any changes and the use of those changed library is permitted without
 imitations. Only requirement:

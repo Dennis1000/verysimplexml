@@ -1,8 +1,8 @@
-﻿{ VerySimpleXML v2.0.2 - a lightweight, one-unit, cross-platform XML reader/writer
-  for Delphi 2010 - 10.1 Berlin by Dennis Spreen
+﻿{ VerySimpleXML v2.0.3 - a lightweight, one-unit, cross-platform XML reader/writer
+  for Delphi 2010 - 10.2 Tokyo by Dennis Spreen
   http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
 
-  (c) Copyrights 2011-2016 Dennis D. Spreen <dennis@spreendigital.de>
+  (c) Copyrights 2011-2017 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
   any changes and the use of those changed library is permitted without
   limitations. Only requirement:
@@ -674,7 +674,7 @@ var
 begin
   Tag := Reader.ReadText('>', [etoDeleteStopChar]);
   Result := ParseTag(Tag, Parent);
-  if Result = Parent then // only non-self closing nodes may have a text
+  if (Result = Parent) and (ParseText) then // only non-self closing nodes may have a text
   begin
     ALine := Reader.ReadText('<', []);
     ALine := Unescape(ALine);
@@ -1028,7 +1028,7 @@ end;
 
 function TXmlNode.InsertChild(const Name: String; Position: Integer; NodeType: TXmlNodeType = ntElement): TXmlNode;
 begin
-  Result := ChildNodes.Insert(Name, Position);
+  Result := ChildNodes.Insert(Name, Position, NodeType);
   if assigned(Result) then
     Result.Parent := Self;
 end;
