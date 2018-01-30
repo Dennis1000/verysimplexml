@@ -1,4 +1,4 @@
-VerySimpleXML v2.0.2 - a lightweight, one-unit XML reader/writer
+VerySimpleXML v2.0.4 - a lightweight, one-unit XML reader/writer
 by Dennis Spreen
 http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
 
@@ -64,12 +64,14 @@ http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
   2.0.3 [Fix] NodeType was ignored by TXmlNode.InsertChild
 	[Fix] Still not supported but better parsing of markup elements lines like !ELEMENT, !ATTLIST and !ENTITY
 
+  2.0.4 [Fix] Fixed fill buffer length
+
       What's still left to do:
         - update example for FMX/VCL
         - upgrade/update code comments and wiki
 
 
-(c) Copyrights 2017 Dennis D. Spreen <dennis@spreendigital.de>
+(c) Copyrights 2018 Dennis D. Spreen <dennis@spreendigital.de>
 This unit is free and can be used for any needs. The introduction of
 any changes and the use of those changed library is permitted without
 imitations. Only requirement:

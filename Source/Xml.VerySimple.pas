@@ -1,8 +1,8 @@
-﻿{ VerySimpleXML v2.0.3 - a lightweight, one-unit, cross-platform XML reader/writer
-  for Delphi 2010 - 10.2 Tokyo by Dennis Spreen
+﻿{ VerySimpleXML v2.0.4 - a lightweight, one-unit, cross-platform XML reader/writer
+  for Delphi 2010 - 10.2.2 Tokyo by Dennis Spreen
   http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
 
-  (c) Copyrights 2011-2017 Dennis D. Spreen <dennis@spreendigital.de>
+  (c) Copyrights 2011-2018 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
   any changes and the use of those changed library is permitted without
   limitations. Only requirement:
@@ -305,7 +305,6 @@ type
   public
     procedure GetFillBuffer(var Method: TStreamReaderFillBuffer);
   end;
-
 
 const
 {$IF CompilerVersion >= 24} // Delphi XE3+ can use Low(), High() and TEncoding.ANSI
@@ -1389,11 +1388,6 @@ begin
   end;
 end;
 
-{function TXmlStreamReader.NoDataInStream: Boolean;
-begin
-  Result := TRttiContext.Create.GetType(TStreamReader).GetField('FNoDataInStream').GetValue(Self).AsBoolean;
-end;}
-
 function TXmlStreamReader.PrepareBuffer(Value: Integer): Boolean;
 begin
   Result := False;
@@ -1415,6 +1409,7 @@ var
   Found: Boolean;
   TempIndex: Integer;
   StopCharLength: Integer;
+  PrevLength: Integer;
 begin
   Result := '';
   if Self.FBufferedData = NIL then
@@ -1439,8 +1434,10 @@ begin
       end
       else
       begin
+        PrevLength := FBufferedData.Length;
         FillBuffer;
-        if Self.FBufferedData.Length = 0 then
+        // Break if no more data
+        if (FBufferedData.Length = 0) or (FBufferedData.Length = PrevLength) then
           Break;
       end;
     end;
