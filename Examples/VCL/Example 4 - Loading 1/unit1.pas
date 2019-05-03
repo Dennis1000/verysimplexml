@@ -61,12 +61,12 @@ begin
 
     // Locate the 'title' node and write its content to the memo
     EntityNode := BookNode.Find('title');
-    if assigned(EntityNode) then
+    if Assigned(EntityNode) then
       Memo1.Lines.Add('Title: ' + EntityNode.Text);
 
     // Locate the 'author' node and write its content to the memo
     EntityNode := BookNode.Find('author');
-    if assigned(EntityNode) then
+    if Assigned(EntityNode) then
       Memo1.Lines.Add('Author: ' + EntityNode.Text);
 
     Memo1.Lines.Add('');

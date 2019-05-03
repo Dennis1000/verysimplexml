@@ -1,8 +1,8 @@
-﻿{ VerySimpleXML v2.0.4 - a lightweight, one-unit, cross-platform XML reader/writer
-  for Delphi 2010 - 10.2.2 Tokyo by Dennis Spreen
+﻿{ VerySimpleXML v2.0.5 - a lightweight, one-unit, cross-platform XML reader/writer
+  for Delphi 2010 - 10.3.2 by Dennis Spreen
   http://blog.spreendigital.de/2014/09/13/verysimplexml-2-0/
 
-  (c) Copyrights 2011-2018 Dennis D. Spreen <dennis@spreendigital.de>
+  (c) Copyrights 2011-2019 Dennis D. Spreen <dennis@spreendigital.de>
   This unit is free and can be used for any needs. The introduction of
   any changes and the use of those changed library is permitted without
   limitations. Only requirement:
@@ -24,7 +24,7 @@ unit Xml.VerySimple;
 interface
 
 uses
-  Classes, SysUtils, Generics.Defaults, Generics.Collections, Rtti;
+  System.Classes, System.SysUtils, Generics.Defaults, Generics.Collections, System.Rtti;
 
 const
   TXmlSpaces = #$20 + #$0A + #$0D + #9;
@@ -72,7 +72,8 @@ type
   TXmlAttribute = class(TObject)
   private
     FValue: String;
-    procedure SetValue(const Value: String);
+  protected
+    procedure SetValue(const Value: String); virtual;
   public
     ///	<summary> Attribute name </summary>
     Name: String;
@@ -84,6 +85,8 @@ type
     function AsString: String;
     /// <summary> Escapes XML control characters </summar>
     class function Escape(const Value: String): String; virtual;
+    ///	<summary> Assign attribute values from source attribute </summary>
+    procedure Assign(Source: TXmlAttribute); virtual;
     ///	<summary> Attribute value (always a String) </summary>
     property Value: String read FValue write SetValue;
   end;
@@ -102,10 +105,11 @@ type
     function HasAttribute(const AttrName: String): Boolean; virtual;
     ///	<summary> Returns the attributes in string representation </summary>
     function AsString: String; virtual;
+    ///	<summary> Clears current attributes and assigns all attributes from source attributes </summary>
+    procedure Assign(Source: TXmlAttributeList); virtual;
   end;
 
   TXmlNode = class(TObject)
-  private
   protected
     [Weak] FDocument: TXmlVerySimple;
     procedure SetDocument(Value: TXmlVerySimple);
@@ -175,8 +179,8 @@ type
   end;
 
   TXmlNodeList = class(TObjectList<TXmlNode>)
-  private
-    function IsSame(const Value1, Value2: String): Boolean;
+  protected
+    function IsSame(const Value1, Value2: String): Boolean; virtual;
   public
     ///	<summary> The xml document of the node list </summary>
     [Weak] Document: TXmlVerySimple;
@@ -213,7 +217,6 @@ type
   end;
 
   TXmlVerySimple = class(TObject)
-  private
   protected
     Root: TXmlNode;
     [Weak] FHeader: TXmlNode;
@@ -298,7 +301,7 @@ type
 implementation
 
 uses
-  StrUtils;
+  System.StrUtils;
 
 type
   TStreamReaderHelper = class helper for TStreamReader
@@ -343,7 +346,7 @@ end;
 function TXmlVerySimple.AddChild(const Name: String; NodeType: TXmlNodeType = ntElement): TXmlNode;
 begin
   Result := CreateNode(Name, NodeType);
-  if (NodeType = ntElement) and (not assigned(FDocumentElement)) then
+  if (NodeType = ntElement) and (not Assigned(FDocumentElement)) then
     FDocumentElement := Result;
   try
     Root.ChildNodes.Add(Result);
@@ -376,7 +379,7 @@ end;
 
 procedure TXmlVerySimple.CreateHeaderNode;
 begin
-  if assigned(FHeader) then
+  if Assigned(FHeader) then
     Exit;
   FHeader := Root.ChildNodes.Insert('xml', 0, ntXmlDecl);
   FHeader.Attributes['version'] := '1.0';  // Default XML version
@@ -405,7 +408,7 @@ end;
 
 function TXmlVerySimple.GetEncoding: String;
 begin
-  if assigned(FHeader) then
+  if Assigned(FHeader) then
     Result := FHeader.Attributes['encoding']
   else
     Result := '';
@@ -418,7 +421,7 @@ end;
 
 function TXmlVerySimple.GetStandAlone: String;
 begin
-  if assigned(FHeader) then
+  if Assigned(FHeader) then
     Result := FHeader.Attributes['standalone']
   else
     Result := '';
@@ -426,7 +429,7 @@ end;
 
 function TXmlVerySimple.GetVersion: String;
 begin
-  if assigned(FHeader) then
+  if Assigned(FHeader) then
     Result := FHeader.Attributes['version']
   else
     Result := '';
@@ -542,7 +545,7 @@ begin
     if FirstChar <> '' then
     begin // Parse a tag, the first tag in a document is the DocumentElement
       Node := ParseTag(Reader, True, Parent);
-      if (not assigned(FDocumentElement)) and (Parent = Root) then
+      if (not Assigned(FDocumentElement)) and (Parent = Root) then
         FDocumentElement := Node;
     end;
   end;
@@ -1028,7 +1031,7 @@ end;
 function TXmlNode.InsertChild(const Name: String; Position: Integer; NodeType: TXmlNodeType = ntElement): TXmlNode;
 begin
   Result := ChildNodes.Insert(Name, Position, NodeType);
-  if assigned(Result) then
+  if Assigned(Result) then
     Result.Parent := Self;
 end;
 
@@ -1047,7 +1050,7 @@ end;
 
 function TXmlNode.NextSibling: TXmlNode;
 begin
-  if not assigned(Parent) then
+  if not Assigned(Parent) then
     Result := NIL
   else
     Result := Parent.ChildNodes.NextSibling(Self);
@@ -1055,7 +1058,7 @@ end;
 
 function TXmlNode.PreviousSibling: TXmlNode;
 begin
-  if not assigned(Parent) then
+  if not Assigned(Parent) then
     Result := NIL
   else
     Result := Parent.ChildNodes.PreviousSibling(Self);
@@ -1071,7 +1074,7 @@ var
   Attribute: TXmlAttribute;
 begin
   Attribute := AttributeList.Find(AttrName); // Search for given name
-  if not assigned(Attribute) then // If attribute is not found, create one
+  if not Assigned(Attribute) then // If attribute is not found, create one
     Attribute := AttributeList.Add(AttrName);
   Attribute.AttributeType := atValue;
   Attribute.Name := AttrName; // this allows rewriting of the attribute name (lower/upper case)
@@ -1112,6 +1115,19 @@ begin
   end;
 end;
 
+procedure TXmlAttributeList.Assign(Source: TXmlAttributeList);
+var
+  Attribute: TXmlAttribute;
+  SourceAttribute: TXmlAttribute;
+begin
+  Clear;
+  for SourceAttribute in Source do
+  begin
+    Attribute := Add('');
+    Attribute.Assign(SourceAttribute);
+  end;
+end;
+
 function TXmlAttributeList.AsString: String;
 var
   Attribute: TXmlAttribute;
@@ -1136,8 +1152,8 @@ var
 begin
   Result := NIL;
   for Attribute in Self do
-    if ((assigned(Document) and Document.IsSame(Attribute.Name, Name)) or // use the documents text comparison
-      ((not assigned(Document)) and (Attribute.Name = Name))) then // or if not assigned then compare names case sensitive
+    if ((Assigned(Document) and Document.IsSame(Attribute.Name, Name)) or // use the documents text comparison
+      ((not Assigned(Document)) and (Attribute.Name = Name))) then // or if not assigned then compare names case sensitive
     begin
       Result := Attribute;
       Break;
@@ -1274,15 +1290,15 @@ end;
 
 function TXmlNodeList.IsSame(const Value1, Value2: String): Boolean;
 begin
-  Result := ((assigned(Document) and Document.IsSame(Value1, Value2)) or // use the documents text comparison
-    ((not assigned(Document)) and (Value1 = Value2))); // or if not assigned then compare names case sensitive
+  Result := ((Assigned(Document) and Document.IsSame(Value1, Value2)) or // use the documents text comparison
+    ((not Assigned(Document)) and (Value1 = Value2))); // or if not assigned then compare names case sensitive
 end;
 
 function TXmlNodeList.NextSibling(Node: TXmlNode): TXmlNode;
 var
   Index: Integer;
 begin
-  if (not assigned(Node)) and (Count > 0) then
+  if (not Assigned(Node)) and (Count > 0) then
     Result := First
   else
   begin
@@ -1306,6 +1322,13 @@ begin
 end;
 
 { TXmlAttribute }
+
+procedure TXmlAttribute.Assign(Source: TXmlAttribute);
+begin
+  FValue := Source.Value;
+  Name := Source.Name;
+  AttributeType := Source.AttributeType;
+end;
 
 function TXmlAttribute.AsString: String;
 begin
